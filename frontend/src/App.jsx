@@ -2624,7 +2624,26 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
     </div>
   );
 }
+
 // ── BOOKING PAGE ──────────────────────────────────────────────────────────
+// ── BOOKING PAGE ──────────────────────────────────────────────────────────
+const colStyle = { gridColumn: "1/-1" };
+const emptyStyle = {};
+
+function Field({ label, id, col, errors, children }) {
+  return (
+    <div className="form-group" style={col ? colStyle : emptyStyle}>
+      <label className="form-label">{label}</label>
+      {children}
+      {errors[id] && (
+        <span style={{ fontSize: "0.7rem", color: "var(--terra)" }}>
+          {errors[id]}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
   const [pax, setPax] = useState({
     firstName: user?.name?.split(" ")[0]||"",
@@ -2642,8 +2661,8 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
     if (!pax.firstName.trim()) e.firstName = "Required";
     if (!pax.lastName.trim())  e.lastName  = "Required";
     if (!pax.email.trim() || !pax.email.includes("@")) e.email = "Valid email required";
-    if (!pax.phone.trim())     e.phone     = "Required";
-    if (!pax.dob)              e.dob       = "Required";
+    if (!pax.phone.trim() || pax.phone.replace(/\D/g, "").length < 10) e.phone = "Valid phone number required";
+    if (!pax.dob) e.dob = "Required";
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -2676,9 +2695,8 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
         modal: { ondismiss: () => setLoading(false) },
         handler: async (rzResponse) => {
           try {
-            // ✅ Step 1: Verify Razorpay payment signature
             const verified = await verifyRazorpayPayment({
-              razorpay_order_id:  rzResponse.razorpay_order_id,
+              razorpay_order_id:   rzResponse.razorpay_order_id,
               razorpay_payment_id: rzResponse.razorpay_payment_id,
               razorpay_signature:  rzResponse.razorpay_signature,
             });
@@ -2689,7 +2707,6 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
               return;
             }
 
-            // ✅ Step 2: Confirm booking with Duffel
             let result;
             try {
               result = await confirmBooking(
@@ -2697,7 +2714,6 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
               );
             } catch (bookingErr) {
               console.error("Duffel booking error:", bookingErr);
-              // ✅ Payment succeeded but booking failed — show real error
               alert(
                 "Payment was successful but booking failed.\n\n" +
                 "Error: " + bookingErr.message + "\n\n" +
@@ -2708,7 +2724,6 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
               return;
             }
 
-            // ✅ Step 3: Go to confirm page
             onBook(flight, pax, result.booking, rzResponse.razorpay_payment_id);
 
           } catch (err) {
@@ -2731,14 +2746,6 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
       setLoading(false);
     }
   };
-
-  const Field = ({ label, id, col, children }) => (
-    <div className="form-group" style={col?{gridColumn:"1/-1"}:{}}>
-      <label className="form-label">{label}</label>
-      {children}
-      {errors[id] && <span style={{fontSize:"0.7rem",color:"var(--terra)"}}>{errors[id]}</span>}
-    </div>
-  );
 
   return (
     <div className="page">
@@ -2823,37 +2830,65 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
                 </div>
               )}
               <div className="pax-form">
-                <Field label="Title" id="title">
+                <Field label="Title" id="title" errors={errors}>
                   <select className="form-input" value={pax.title} onChange={e=>set("title",e.target.value)}>
-                    <option value="mr">Mr</option><option value="ms">Ms</option><option value="mrs">Mrs</option>
+                    <option value="mr">Mr</option>
+                    <option value="ms">Ms</option>
+                    <option value="mrs">Mrs</option>
                   </select>
                 </Field>
-                <Field label="Gender" id="gender">
+                <Field label="Gender" id="gender" errors={errors}>
                   <select className="form-input" value={pax.gender} onChange={e=>set("gender",e.target.value)}>
-                    <option value="m">Male</option><option value="f">Female</option>
+                    <option value="m">Male</option>
+                    <option value="f">Female</option>
                   </select>
                 </Field>
-                <Field label="First Name" id="firstName">
-                  <input className="form-input" placeholder="Arjun" value={pax.firstName}
+                <Field label="First Name" id="firstName" errors={errors}>
+                  <input
+                    className="form-input"
+                    placeholder="Arjun"
+                    value={pax.firstName}
                     onChange={e=>set("firstName",e.target.value)}
-                    style={errors.firstName?{borderColor:"var(--terra)"}:{}}/>
+                    style={errors.firstName ? {borderColor:"var(--terra)"} : {}}
+                  />
                 </Field>
-                <Field label="Last Name" id="lastName">
-                  <input className="form-input" placeholder="Sharma" value={pax.lastName}
+                <Field label="Last Name" id="lastName" errors={errors}>
+                  <input
+                    className="form-input"
+                    placeholder="Sharma"
+                    value={pax.lastName}
                     onChange={e=>set("lastName",e.target.value)}
-                    style={errors.lastName?{borderColor:"var(--terra)"}:{}}/>
+                    style={errors.lastName ? {borderColor:"var(--terra)"} : {}}
+                  />
                 </Field>
-                <Field label="Date of Birth" id="dob" col>
-                  <input type="date" className="form-input" value={pax.dob}
-                    onChange={e=>set("dob",e.target.value)} style={errors.dob?{borderColor:"var(--terra)"}:{}}/>
+                <Field label="Date of Birth" id="dob" col errors={errors}>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={pax.dob}
+                    onChange={e=>set("dob",e.target.value)}
+                    style={errors.dob ? {borderColor:"var(--terra)"} : {}}
+                  />
                 </Field>
-                <Field label="Email Address" id="email" col>
-                  <input type="email" className="form-input" placeholder="arjun@email.com" value={pax.email}
-                    onChange={e=>set("email",e.target.value)} style={errors.email?{borderColor:"var(--terra)"}:{}}/>
+                <Field label="Email Address" id="email" col errors={errors}>
+                  <input
+                    type="email"
+                    className="form-input"
+                    placeholder="arjun@email.com"
+                    value={pax.email}
+                    onChange={e=>set("email",e.target.value)}
+                    style={errors.email ? {borderColor:"var(--terra)"} : {}}
+                  />
                 </Field>
-                <Field label="Phone Number" id="phone" col>
-                  <input type="tel" className="form-input" placeholder="+91 98765 43210" value={pax.phone}
-                    onChange={e=>set("phone",e.target.value)} style={errors.phone?{borderColor:"var(--terra)"}:{}}/>
+                <Field label="Phone Number" id="phone" col errors={errors}>
+                  <input
+                    type="tel"
+                    className="form-input"
+                    placeholder="+91 98765 43210"
+                    value={pax.phone}
+                    onChange={e=>set("phone",e.target.value)}
+                    style={errors.phone ? {borderColor:"var(--terra)"} : {}}
+                  />
                 </Field>
               </div>
             </div>
@@ -2897,7 +2932,6 @@ function ConfirmPage({ booking, onHome }) {
       const W = 210;
       const margin = 18;
 
-      // ── HEADER BAND ──
       doc.setFillColor(93, 46, 28);
       doc.rect(0, 0, W, 38, "F");
       doc.setTextColor(255, 255, 255);
@@ -2915,7 +2949,6 @@ function ConfirmPage({ booking, onHome }) {
       doc.setTextColor(200, 170, 140);
       doc.text(`Generated: ${new Date().toLocaleString("en-IN")}`, W - margin, 28, { align: "right" });
 
-      // ── BOOKING REFERENCE BOX ──
       doc.setFillColor(255, 248, 240);
       doc.setDrawColor(193, 98, 47);
       doc.setLineWidth(0.5);
@@ -2935,7 +2968,6 @@ function ConfirmPage({ booking, onHome }) {
         doc.text(`Payment ID: ${booking.paymentId}`, W - margin - 4, 64, { align: "right" });
       }
 
-      // ── SECTION HELPER ──
       let y = 78;
       const sectionTitle = (title) => {
         doc.setFillColor(245, 235, 225);
@@ -2960,7 +2992,6 @@ function ConfirmPage({ booking, onHome }) {
         y += 9;
       };
 
-      // ── FLIGHT DETAILS ──
       sectionTitle("✈  Flight Details");
       row("Airline", booking.flight.airline?.name);
       row("Flight Class", booking.flight.class);
@@ -2972,7 +3003,6 @@ function ConfirmPage({ booking, onHome }) {
       row("Baggage Allowance", booking.flight.baggage || "15 kg");
       row("Refundable", booking.flight.refundable ? "Yes" : "No");
 
-      // ── PASSENGER DETAILS ──
       y += 4;
       sectionTitle("👤  Passenger Details");
       row("Full Name", `${booking.pax.firstName} ${booking.pax.lastName}`);
@@ -2982,17 +3012,15 @@ function ConfirmPage({ booking, onHome }) {
       row("Email", booking.pax.email);
       row("Phone", booking.pax.phone);
 
-      // ── FARE BREAKDOWN ──
       y += 4;
       sectionTitle("💰  Fare Breakdown");
-      const base   = booking.flight.price || 0;
-      const taxes  = Math.round(base * 0.12);
-      const total  = Math.round(booking.flight.totalPrice * 1.12);
-      const pax    = booking.flight.pax || 1;
+      const base  = booking.flight.price || 0;
+      const taxes = Math.round(base * 0.12);
+      const total = Math.round(booking.flight.totalPrice * 1.12);
+      const pax   = booking.flight.pax || 1;
       row("Base Fare (per person)", `INR ${Number(base).toLocaleString("en-IN")}`);
       row("Taxes & Fees (12%)", `INR ${Number(taxes).toLocaleString("en-IN")}`);
       row("Passengers", `x ${pax}`);
-      // Total row highlighted
       doc.setFillColor(255, 248, 240);
       doc.setDrawColor(193, 98, 47);
       doc.setLineWidth(0.4);
@@ -3005,7 +3033,6 @@ function ConfirmPage({ booking, onHome }) {
       doc.text(`INR ${Number(total).toLocaleString("en-IN")}`, W - margin - 4, y + 6, { align: "right" });
       y += 16;
 
-      // ── BOOKING INFO ──
       y += 4;
       sectionTitle("📋  Booking Information");
       row("Booking Reference", ref, true);
@@ -3013,7 +3040,6 @@ function ConfirmPage({ booking, onHome }) {
       row("Status", "CONFIRMED ✔", true);
       row("Booked On", new Date().toLocaleDateString("en-IN", { day:"2-digit", month:"long", year:"numeric" }));
 
-      // ── FOOTER ──
       doc.setFillColor(93, 46, 28);
       doc.rect(0, 277, W, 20, "F");
       doc.setTextColor(200, 170, 140);
@@ -3046,20 +3072,20 @@ function ConfirmPage({ booking, onHome }) {
           )}
           <div style={{marginTop:20,display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             {[
-              ["Flight",          booking.flight.airline.name],
-              ["Route",           `${booking.flight.from} → ${booking.flight.to}`],
-              ["Departure",       fmtTime(booking.flight.dep)],
-              ["Date",            fmtDate(booking.flight.dep)],
-              ["Arrival",         fmtTime(booking.flight.arr)],
-              ["Duration",        booking.flight.duration],
-              ["Stops",           booking.flight.stops === 0 ? "Non-stop" : `${booking.flight.stops} stop`],
-              ["Class",           booking.flight.class],
-              ["Baggage",         booking.flight.baggage || "15 kg"],
-              ["Passenger",       `${booking.pax.firstName} ${booking.pax.lastName}`],
-              ["Email",           booking.pax.email],
-              ["Phone",           booking.pax.phone],
-              ["Status",          "✅ Confirmed"],
-              ["Total Paid",      `₹ ${Math.round(booking.flight.totalPrice * 1.12).toLocaleString()}`],
+              ["Flight",      booking.flight.airline.name],
+              ["Route",       `${booking.flight.from} → ${booking.flight.to}`],
+              ["Departure",   fmtTime(booking.flight.dep)],
+              ["Date",        fmtDate(booking.flight.dep)],
+              ["Arrival",     fmtTime(booking.flight.arr)],
+              ["Duration",    booking.flight.duration],
+              ["Stops",       booking.flight.stops === 0 ? "Non-stop" : `${booking.flight.stops} stop`],
+              ["Class",       booking.flight.class],
+              ["Baggage",     booking.flight.baggage || "15 kg"],
+              ["Passenger",   `${booking.pax.firstName} ${booking.pax.lastName}`],
+              ["Email",       booking.pax.email],
+              ["Phone",       booking.pax.phone],
+              ["Status",      "✅ Confirmed"],
+              ["Total Paid",  `₹ ${Math.round(booking.flight.totalPrice * 1.12).toLocaleString()}`],
             ].map(([k,v]) => (
               <div key={k} className="info-item">
                 <div className="info-key">{k}</div>
@@ -3069,7 +3095,6 @@ function ConfirmPage({ booking, onHome }) {
           </div>
         </div>
 
-        {/* ── DOWNLOAD BUTTON ── */}
         <button
           onClick={downloadPDF}
           style={{

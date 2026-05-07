@@ -48,6 +48,31 @@ def get_razorpay_client():
 
 
 # ───────────────────────────────────────────────────────────────
+# PHONE NUMBER HELPER
+# ───────────────────────────────────────────────────────────────
+def format_phone(phone_str: str) -> str:
+    """
+    Cleans and formats phone number to E.164 format for Duffel.
+    e.g. '+91 98765 43210' → '+919876543210'
+    """
+    if not phone_str:
+        return "+910000000000"
+    # Remove spaces, dashes, brackets, dots
+    cleaned = re.sub(r'[\s\-\(\)\.]', '', phone_str.strip())
+    # Ensure it starts with +
+    if not cleaned.startswith('+'):
+        # If starts with 0, replace with +91
+        if cleaned.startswith('0'):
+            cleaned = '+91' + cleaned[1:]
+        # If 10 digits, assume Indian number
+        elif len(cleaned) == 10:
+            cleaned = '+91' + cleaned
+        else:
+            cleaned = '+' + cleaned
+    return cleaned
+
+
+# ───────────────────────────────────────────────────────────────
 # HOME
 # ───────────────────────────────────────────────────────────────
 @app.get("/")
@@ -119,10 +144,8 @@ async def create_payment_order(data: dict):
     """
     amount   = data.get("amount")
     currency = data.get("currency", "INR")
-    receipt = data.get("receipt", f"rcpt_{datetime.now().strftime('%Y%m%d%H%M%S')}")
-    receipt = str(receipt)[:40]
-# FIX: limit to 40 characters (Razorpay requirement)
-
+    receipt  = data.get("receipt", f"rcpt_{datetime.now().strftime('%Y%m%d%H%M%S')}")
+    receipt  = str(receipt)[:40]  # Razorpay limit: 40 chars
 
     if not amount or int(amount) <= 0:
         raise HTTPException(status_code=400, detail="Invalid amount")
@@ -281,7 +304,7 @@ def get_flights(from_city: str, to_city: str, date: str, pax: int = 1, cabin: st
                 seg      = segments[0]
                 last_seg = segments[-1]
 
-                op          = seg.get("operating_carrier") or {}
+                op           = seg.get("operating_carrier") or {}
                 airline_name = op.get("name") or "Unknown Airline"
                 airline_code = op.get("iata_code") or "??"
                 dur_str      = parse_duration(slice_.get("duration"))
@@ -292,24 +315,22 @@ def get_flights(from_city: str, to_city: str, date: str, pax: int = 1, cabin: st
                     baggage_info = f"{(bags[0].get('quantity') or 1) * 15} kg"
 
                 try:
-                  price = float(o.get("total_amount") or 0)
+                    price = float(o.get("total_amount") or 0)
                 except:
-                  price = 0.0
+                    price = 0.0
 
                 currency = o.get("total_currency") or "USD"
 
-                 # 🔥 FIX: Convert USD → INR
-                USD_TO_INR = 95  # you can change later or make dynamic
-
+                # 🔥 Convert USD → INR
+                USD_TO_INR = 95
                 if currency == "USD":
-                   price = price * USD_TO_INR
-                   currency = "INR"
+                    price    = price * USD_TO_INR
+                    currency = "INR"
 
-                currency  = o.get("total_currency") or "USD"
-                dep_raw   = seg.get("departing_at") or ""
-                arr_raw   = last_seg.get("arriving_at") or ""
-                dep_time  = dep_raw[:16].replace("T", " ") if dep_raw else "N/A"
-                arr_time  = arr_raw[:16].replace("T", " ") if arr_raw else "N/A"
+                dep_raw  = seg.get("departing_at") or ""
+                arr_raw  = last_seg.get("arriving_at") or ""
+                dep_time = dep_raw[:16].replace("T", " ") if dep_raw else "N/A"
+                arr_time = arr_raw[:16].replace("T", " ") if arr_raw else "N/A"
 
                 conditions    = o.get("conditions") or {}
                 refund_before = conditions.get("refund_before_departure") or {}
@@ -363,10 +384,6 @@ def search_flights(from_city: str, to_city: str, date: str, pax: int = 1, cabin:
 # ───────────────────────────────────────────────────────────────
 # BOOKING ENDPOINT
 # ───────────────────────────────────────────────────────────────
-# ───────────────────────────────────────────────────────────────
-# ───────────────────────────────────────────────────────────────
-# BOOKING ENDPOINT
-# ───────────────────────────────────────────────────────────────
 bookings_db = []
 
 def format_dob(dob_str):
@@ -377,6 +394,7 @@ def format_dob(dob_str):
         return dob_str or "1990-01-01"
     except:
         return "1990-01-01"
+
 
 @app.post("/booking")
 def book_flight(data: dict):
@@ -400,6 +418,10 @@ def book_flight(data: dict):
         if not passenger_id:
             raise HTTPException(status_code=400, detail="Passenger ID not found in offer.")
 
+        # ✅ Clean phone number to E.164 format
+        clean_phone = format_phone(passenger.get("phone", ""))
+        print(f"📞 Phone formatted: {passenger.get('phone')} → {clean_phone}")
+
         order_res = requests.post(
             f"{DUFFEL_BASE}/air/orders",
             headers=DUFFEL_HEADERS,
@@ -415,10 +437,10 @@ def book_flight(data: dict):
                         "family_name":  passenger.get("lastName") or "",
                         "born_on":      format_dob(passenger.get("dob")),
                         "email":        passenger.get("email") or "",
-                        "phone_number": passenger.get("phone") or "+910000000000",
+                        "phone_number": clean_phone,   # ✅ FIXED
                         "type":         "adult"
                     }],
-                    "payments": [{          # ✅ required by Duffel
+                    "payments": [{
                         "type":     "balance",
                         "currency": offer.get("total_currency") or "USD",
                         "amount":   offer.get("total_amount") or "0"
@@ -458,6 +480,7 @@ def book_flight(data: dict):
 @app.get("/bookings")
 def get_bookings():
     return bookings_db
+
 
 # ═══════════════════════════════════════════════════════════════
 # AI CHATBOT
@@ -582,54 +605,48 @@ async def chat(request: dict):
     except Exception as e:
         print("Chat error:", e)
         return {"reply": "⚠️ AI service temporarily unavailable. Please try again shortly."}
-    # ═══════════════════════════════════════════════════════════════
+
+
+# ═══════════════════════════════════════════════════════════════
 # FLIGHT PRICE PREDICTION AI AGENT
 # ═══════════════════════════════════════════════════════════════
-
 @app.post("/ai/predict-price")
 async def predict_price(data: dict):
-
     try:
         from_city = data.get("from_city")
-        to_city = data.get("to_city")
-        date = data.get("date")
+        to_city   = data.get("to_city")
+        date      = data.get("date")
 
         if not from_city or not to_city or not date:
             raise HTTPException(status_code=400, detail="Missing fields")
 
         days_left = (datetime.strptime(date, "%Y-%m-%d") - datetime.now()).days
 
-
-        # Simple prediction intelligence logic
         if days_left <= 2:
-            verdict = "BUY NOW"
-            trend = "RISING 📈"
+            verdict    = "BUY NOW"
+            trend      = "RISING 📈"
             confidence = 90
-
         elif days_left <= 7:
-            verdict = "BUY NOW"
-            trend = "LIKELY RISING 📈"
+            verdict    = "BUY NOW"
+            trend      = "LIKELY RISING 📈"
             confidence = 78
-
         elif days_left <= 21:
-            verdict = "NEUTRAL"
-            trend = "STABLE ➖"
+            verdict    = "NEUTRAL"
+            trend      = "STABLE ➖"
             confidence = 65
-
         else:
-            verdict = "WAIT"
-            trend = "MAY DROP 📉"
+            verdict    = "WAIT"
+            trend      = "MAY DROP 📉"
             confidence = 72
 
-
         return {
-            "route": f"{from_city} → {to_city}",
-            "travel_date": date,
-            "verdict": verdict,
-            "confidence": confidence,
-            "price_trend": trend,
-            "best_booking_window": "2–5 weeks before departure",
-            "summary": "Prediction based on booking window timing and airline pricing behavior."
+            "route":                f"{from_city} → {to_city}",
+            "travel_date":          date,
+            "verdict":              verdict,
+            "confidence":           confidence,
+            "price_trend":          trend,
+            "best_booking_window":  "2–5 weeks before departure",
+            "summary":              "Prediction based on booking window timing and airline pricing behavior."
         }
 
     except Exception as e:
