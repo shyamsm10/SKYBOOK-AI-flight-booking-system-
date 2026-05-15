@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-const API_BASE = "http://127.0.0.1:8000";
+import { createClient } from "@supabase/supabase-js";
+const API_BASE = "https://skybook-ai-flight-booking-system.onrender.com";
 const GOOGLE_CLIENT_ID = "164546349235-i7eg4h4lrako81vmiooejdigjka6c1lu.apps.googleusercontent.com";
+const SUPABASE_URL = "https://uhjuesjqzrfagmbpfczb.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_JY60rZfPfsGCnSr3pUsB5w_5ZpM499H";
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ── FONTS & GLOBAL STYLES ─────────────────────────────────────────────────
 const GlobalStyles = () => (
@@ -724,31 +728,31 @@ const GlobalStyles = () => (
       position: fixed; bottom: 28px; right: 28px; z-index: 150;
     }
     .ai-toggle {
-      width: 58px; height: 58px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--terra), #a0471f);
-      border: none; cursor: pointer; font-size: 1.4rem;
-      color: var(--white); box-shadow: 0 6px 24px rgba(193,98,47,0.5);
+      width: 56px; height: 56px; border-radius: 50%;
+      background: #1a0f0a;
+      border: none; cursor: pointer; font-size: 1.3rem;
+      color: var(--white); box-shadow: 0 4px 20px rgba(0,0,0,0.35);
       transition: all var(--transition);
       display: flex; align-items: center; justify-content: center;
     }
-    .ai-toggle:hover { transform: scale(1.08); box-shadow: 0 8px 32px rgba(193,98,47,0.6); }
+    .ai-toggle:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(0,0,0,0.45); }
     .ai-chat-box {
       position: absolute; bottom: 72px; right: 0;
-      width: 360px; background: var(--white);
-      border-radius: 18px; border: 1px solid var(--sand);
-      box-shadow: 0 16px 60px rgba(0,0,0,0.18);
+      width: 420px; background: var(--white);
+      border-radius: 20px; border: 0.5px solid var(--sand);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.15);
       overflow: hidden;
       animation: slideUp 0.25s cubic-bezier(.4,0,.2,1);
     }
     .ai-chat-header {
-      display: flex; align-items: center; gap: 9px;
-      padding: 14px 18px;
-      background: linear-gradient(135deg, #1a0f0a, #3d2515);
+      display: flex; align-items: center; gap: 10px;
+      padding: 13px 15px;
+      background: #1a1410;
       border-bottom: 1px solid rgba(255,255,255,0.06);
     }
     .ai-dot {
       width: 8px; height: 8px; border-radius: 50%;
-      background: #4caf50; box-shadow: 0 0 6px rgba(76,175,80,0.6);
+      background: #4caf50; flex-shrink: 0;
       animation: pulse-dot 2s ease infinite;
     }
     @keyframes pulse-dot {
@@ -756,46 +760,50 @@ const GlobalStyles = () => (
       50% { opacity: 0.6; transform: scale(0.85); }
     }
     .ai-header-name {
-      font-size: 0.84rem; font-weight: 600; color: var(--cream);
-      flex: 1;
+      font-size: 0.84rem; font-weight: 600; color: #fff;
     }
-    .ai-header-sub { font-size: 0.68rem; color: rgba(250,246,240,0.5); }
+    .ai-header-sub { font-size: 0.68rem; color: rgba(255,255,255,0.38); margin-top: 1px; }
     .ai-close-btn {
-      background: none; border: none; cursor: pointer;
-      color: rgba(250,246,240,0.5); font-size: 0.9rem;
-      transition: color var(--transition);
+      background: rgba(255,255,255,0.08); border: none; cursor: pointer;
+      color: rgba(255,255,255,0.5); font-size: 0.82rem;
+      width: 26px; height: 26px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+      transition: all var(--transition); flex-shrink: 0;
     }
-    .ai-close-btn:hover { color: var(--terra2); }
+    .ai-close-btn:hover { background: rgba(255,255,255,0.15); color: #fff; }
     .ai-messages {
-      height: 320px; overflow-y: auto;
-      padding: 16px; display: flex; flex-direction: column; gap: 10px;
-      background: var(--cream);
+      height: 340px; overflow-y: auto;
+      padding: 14px; display: flex; flex-direction: column; gap: 10px;
+      background: #f7f3ef;
     }
-    .ai-messages::-webkit-scrollbar { width: 4px; }
+    .ai-messages::-webkit-scrollbar { width: 3px; }
     .ai-messages::-webkit-scrollbar-track { background: transparent; }
     .ai-messages::-webkit-scrollbar-thumb { background: var(--sand); border-radius: 2px; }
     .ai-msg {
-      max-width: 88%; padding: 10px 14px;
-      border-radius: 14px; font-size: 0.83rem; line-height: 1.6;
+      max-width: 85%; padding: 10px 13px;
+      font-size: 0.82rem; line-height: 1.6;
       white-space: pre-line; word-break: break-word;
       animation: msgIn 0.2s ease;
     }
     @keyframes msgIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     .ai-msg.bot {
       background: var(--white); color: var(--ink2);
-      border: 1px solid var(--sand);
-      border-bottom-left-radius: 4px; align-self: flex-start;
+      border: 0.5px solid var(--sand);
+      border-radius: 16px; border-bottom-left-radius: 4px;
+      align-self: flex-start;
     }
     .ai-msg.user {
-      background: linear-gradient(135deg, var(--terra), #a0471f);
-      color: var(--white); border-bottom-right-radius: 4px;
+      background: #c1622f;
+      color: var(--white);
+      border-radius: 16px; border-bottom-right-radius: 4px;
       align-self: flex-end;
     }
     .ai-typing {
       display: flex; gap: 4px; align-items: center;
       padding: 10px 14px; background: var(--white);
-      border: 1px solid var(--sand); border-radius: 14px;
-      border-bottom-left-radius: 4px; align-self: flex-start; width: fit-content;
+      border: 0.5px solid var(--sand);
+      border-radius: 16px; border-bottom-left-radius: 4px;
+      align-self: flex-start; width: fit-content;
     }
     .ai-typing span {
       width: 6px; height: 6px; border-radius: 50%;
@@ -808,39 +816,39 @@ const GlobalStyles = () => (
       30% { transform: translateY(-6px); }
     }
     .ai-quick-replies {
-      display: flex; flex-wrap: wrap; gap: 6px;
-      padding: 8px 16px; background: var(--cream);
-      border-top: 1px solid var(--sand);
+      display: flex; flex-wrap: wrap; gap: 5px;
+      padding: 10px 14px; background: var(--white);
+      border-top: 0.5px solid var(--sand);
     }
     .quick-reply {
-      padding: 5px 12px; border-radius: 50px;
-      background: var(--white); border: 1px solid var(--sand);
-      font-size: 0.72rem; font-family: var(--body); cursor: pointer;
+      padding: 5px 11px; border-radius: 50px;
+      background: #f7f3ef; border: 0.5px solid var(--sand);
+      font-size: 0.71rem; font-family: var(--body); cursor: pointer;
       color: var(--ink2); font-weight: 500;
       transition: all var(--transition);
     }
-    .quick-reply:hover { border-color: var(--terra); color: var(--terra); background: rgba(193,98,47,0.04); }
+    .quick-reply:hover { border-color: var(--terra); color: var(--terra); background: rgba(193,98,47,0.05); }
     .ai-input-row {
-      display: flex; gap: 8px; padding: 12px 14px;
-      background: var(--white); border-top: 1px solid var(--sand);
+      display: flex; gap: 8px; padding: 11px 13px;
+      background: var(--white); border-top: 0.5px solid var(--sand);
+      align-items: center;
     }
     .ai-input {
-      flex: 1; padding: 9px 13px; border-radius: 9px;
-      border: 1.5px solid var(--sand); font-family: var(--body);
-      font-size: 0.84rem; color: var(--ink); outline: none;
+      flex: 1; padding: 9px 13px; border-radius: 22px;
+      border: 0.5px solid var(--sand); font-family: var(--body);
+      font-size: 0.82rem; color: var(--ink); outline: none;
       transition: border-color var(--transition);
-      background: var(--cream);
+      background: #f7f3ef;
     }
     .ai-input:focus { border-color: var(--terra); background: var(--white); }
     .ai-send {
-      width: 38px; height: 38px; border-radius: 9px;
-      background: var(--terra); color: var(--white); border: none;
-      cursor: pointer; font-size: 1rem; font-weight: 700;
-      transition: all var(--transition); flex-shrink: 0;
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #c1622f; color: var(--white); border: none;
+      cursor: pointer; transition: all var(--transition); flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
     }
-    .ai-send:hover { background: var(--terra2); transform: scale(1.05); }
-    .ai-send:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .ai-send:hover { background: #a5521f; transform: scale(1.05); }
+    .ai-send:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
 
     /* ── PRICE PREDICTOR AGENT ── */
     .price-fab {
@@ -2087,73 +2095,421 @@ function PricePredictorAgent() {
     </div>
   );
 }
+// ── Supabase client helpers ───────────────────────────────────────────────
+
+function getBrowserId() {
+  let id = localStorage.getItem("skybook_browser_id");
+  if (!id) {
+    id = `br_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    localStorage.setItem("skybook_browser_id", id);
+  }
+  return id;
+}
+
+async function dbGetSessions(browserId) {
+  const { data, error } = await supabase
+    .from("chat_sessions")
+    .select("*")
+    .eq("browser_id", browserId)
+    .order("updated_at", { ascending: false })
+    .limit(20);
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function dbCreateSession(id, browserId, title = "New Chat") {
+  const { data, error } = await supabase
+    .from("chat_sessions")
+    .insert({ id, browser_id: browserId, title })
+    .select();
+  if (error) throw new Error(error.message);
+  return data[0];
+}
+
+async function dbUpdateSession(id, fields) {
+  const { data, error } = await supabase
+    .from("chat_sessions")
+    .update({ ...fields, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select();
+  if (error) throw new Error(error.message);
+  return data[0];
+}
+
+async function dbDeleteSession(id) {
+  const { error } = await supabase
+    .from("chat_sessions")
+    .delete()
+    .eq("id", id);
+  if (error) throw new Error(error.message);
+}
+
+async function dbGetMessages(sessionId) {
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .select("*")
+    .eq("session_id", sessionId)
+    .order("created_at", { ascending: true });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+async function dbAddMessage(sessionId, role, content) {
+  const { data, error } = await supabase
+    .from("chat_messages")
+    .insert({ session_id: sessionId, role, content })
+    .select();
+  if (error) throw new Error(error.message);
+  return data[0];
+}
+
 // ── AI CHAT ───────────────────────────────────────────────────────────────
 function AiChat() {
-  const [open, setOpen] = useState(false);
-  const [msgs, setMsgs] = useState([
-    { role:"bot", text:"Hi! I'm SkyBook AI ✈️\n\nAsk me to find flights, compare prices, or answer any travel question.\n\nTry: *\"Flights from Delhi to Dubai tomorrow\"*" }
-  ]);
-  const [inp, setInp] = useState("");
-  const [loading, setLoading] = useState(false);
-  const endRef = useRef(null);
+  const [open, setOpen]                   = useState(false);
+  const [msgs, setMsgs]                   = useState(null);
+  const [inp, setInp]                     = useState("");
+  const [loading, setLoading]             = useState(false);
+  const [showHistory, setShowHistory]     = useState(false);
+  const [sessions, setSessions]           = useState([]);
+  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [dbReady, setDbReady]             = useState(false);
+  const [dbError, setDbError]             = useState("");
+  const endRef   = useRef(null);
   const inputRef = useRef(null);
 
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior:"smooth" }); }, [msgs, loading]);
-  useEffect(() => { if (open) setTimeout(() => inputRef.current?.focus(), 100); }, [open]);
+  const WELCOME_TEXT =
+    "Happy to help — which route are you looking at?\n\nTry: *\"Flights from Delhi to Dubai tomorrow\"*";
+  useEffect(() => {
+    (async () => {
+      const browserId = getBrowserId();
+      try {
+        const sessionList = await dbGetSessions(browserId);
+        setSessions(sessionList);
+        setDbReady(true);
+        const lastId = localStorage.getItem("skybook_last_session");
+        const lastSession = lastId && sessionList.find((s) => s.id === lastId);
+        if (lastSession) {
+          await loadSession(lastSession.id, false);
+        } else {
+          await createNewSession(browserId);
+        }
+      } catch (e) {
+        setDbError("Could not connect to Supabase. Check your URL & key.");
+        setMsgs([{ role: "bot", text: WELCOME_TEXT }]);
+        setCurrentSessionId("local");
+        setDbReady(false);
+      }
+    })();
+  }, []);
 
-  const send = useCallback(async (text) => {
-    const txt = (text || inp).trim();
-    if (!txt || loading) return;
-    setInp(""); setLoading(true);
-    const newMsgs = [...msgs, { role:"user", text:txt }];
-    setMsgs(newMsgs);
-    const history = newMsgs.filter((_,i) => i > 0)
-      .map(m => ({ role: m.role==="bot"?"assistant":"user", content: m.text }));
-    const reply = await askAI(history);
-    setMsgs(prev => [...prev, { role:"bot", text:reply }]);
-    setLoading(false);
-  }, [inp, msgs, loading]);
+  const createNewSession = async (browserId) => {
+    const bid = browserId || getBrowserId();
+    const sid = `s_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    try {
+      await dbCreateSession(sid, bid, "New Chat");
+      await dbAddMessage(sid, "bot", WELCOME_TEXT);
+      localStorage.setItem("skybook_last_session", sid);
+    } catch {}
+    setCurrentSessionId(sid);
+    setMsgs([{ role: "bot", text: WELCOME_TEXT }]);
+    setShowHistory(false);
+    try {
+      const updated = await dbGetSessions(bid);
+      setSessions(updated);
+    } catch {}
+  };
+
+  const loadSession = async (sid, closeHistory = true) => {
+    try {
+      const rows = await dbGetMessages(sid);
+      const messages = rows.map((r) => ({ role: r.role, text: r.content }));
+      setCurrentSessionId(sid);
+      setMsgs(messages.length ? messages : [{ role: "bot", text: WELCOME_TEXT }]);
+      localStorage.setItem("skybook_last_session", sid);
+      if (closeHistory) setShowHistory(false);
+    } catch {
+      setDbError("Failed to load session.");
+    }
+  };
+
+  const deleteSession = async (e, sid) => {
+    e.stopPropagation();
+    try {
+      await dbDeleteSession(sid);
+      const updated = sessions.filter((s) => s.id !== sid);
+      setSessions(updated);
+      if (sid === currentSessionId) await createNewSession();
+    } catch {
+      setDbError("Failed to delete session.");
+    }
+  };
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [msgs, loading]);
+
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 100);
+  }, [open]);
+
+  const send = useCallback(
+    async (text) => {
+      const txt = (text || inp).trim();
+      if (!txt || loading || !msgs) return;
+      setInp("");
+      setLoading(true);
+      const userMsg = { role: "user", text: txt };
+      const newMsgs = [...msgs, userMsg];
+      setMsgs(newMsgs);
+      if (dbReady && currentSessionId !== "local") {
+        try {
+          await dbAddMessage(currentSessionId, "user", txt);
+          const firstUser = newMsgs.find((m) => m.role === "user");
+          if (firstUser) {
+            const title = firstUser.text.slice(0, 60) + (firstUser.text.length > 60 ? "…" : "");
+            await dbUpdateSession(currentSessionId, { title });
+            setSessions((prev) =>
+              prev.map((s) => (s.id === currentSessionId ? { ...s, title } : s))
+            );
+          }
+        } catch {}
+      }
+      const history = newMsgs
+        .filter((_, i) => i > 0)
+        .map((m) => ({ role: m.role === "bot" ? "assistant" : "user", content: m.text }));
+      const reply = await askAI(history);
+      const botMsg = { role: "bot", text: reply };
+      setMsgs((prev) => [...prev, botMsg]);
+      if (dbReady && currentSessionId !== "local") {
+        try {
+          await dbAddMessage(currentSessionId, "bot", reply);
+          await dbUpdateSession(currentSessionId, {});
+          const updated = await dbGetSessions(getBrowserId());
+          setSessions(updated);
+        } catch {}
+      }
+      setLoading(false);
+    },
+    [inp, msgs, loading, currentSessionId, dbReady]
+  );
+
+  const formatDate = (ts) =>
+    new Date(ts).toLocaleDateString("en-IN", {
+      day: "numeric", month: "short",
+      hour: "2-digit", minute: "2-digit",
+    });
+
+  if (msgs === null) return null;
 
   return (
     <div className="ai-fab">
-      {open && (
-        <div className="ai-chat-box">
-          <div className="ai-chat-header">
-            <div className="ai-dot"/>
-            <div style={{flex:1}}>
-              <div className="ai-header-name">SkyBook AI Agent</div>
-              <div className="ai-header-sub">Powered by Groq · Live Duffel data</div>
-            </div>
-            <button className="ai-close-btn" onClick={() => setOpen(false)}>✕</button>
+
+      {/* ── HISTORY PANEL — floats separately, does not push chat ── */}
+      {open && showHistory && (
+        <div style={{
+          position: "absolute", bottom: 72, right: 0,
+          width: 420, background: "#fff",
+          borderRadius: 20, border: "0.5px solid var(--sand)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
+          overflow: "hidden", zIndex: 160,
+          animation: "slideUp 0.25s cubic-bezier(.4,0,.2,1)",
+          maxHeight: 420, display: "flex", flexDirection: "column",
+        }}>
+          {/* History header */}
+          <div style={{
+            padding: "13px 15px", background: "#1a1410",
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            flexShrink: 0,
+          }}>
+            <span style={{ fontSize: "0.84rem", fontWeight: 600, color: "#fff" }}>
+              Recent Conversations
+            </span>
+            <button
+              onClick={() => setShowHistory(false)}
+              style={{
+                background: "rgba(255,255,255,0.08)", border: "none",
+                color: "rgba(255,255,255,0.6)", cursor: "pointer",
+                width: 26, height: 26, borderRadius: 6,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "0.82rem",
+              }}
+            >✕</button>
           </div>
-          <div className="ai-messages">
-            {msgs.map((m,i) => (
-              <div key={i} className={`ai-msg ${m.role}`}>{m.text}</div>
-            ))}
-            {loading && <div className="ai-typing"><span/><span/><span/></div>}
-            <div ref={endRef}/>
+
+          {/* Session list */}
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {sessions.length === 0 ? (
+              <div style={{ padding: "14px 16px", fontSize: "0.8rem", color: "var(--muted)" }}>
+                No saved chats yet.
+              </div>
+            ) : (
+              sessions.map((s) => (
+                <div
+                  key={s.id}
+                  onClick={() => loadSession(s.id)}
+                  style={{
+                    padding: "10px 14px", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 8,
+                    background: s.id === currentSessionId ? "var(--cream2)" : "transparent",
+                    borderLeft: s.id === currentSessionId ? "3px solid var(--terra)" : "3px solid transparent",
+                    borderBottom: "0.5px solid var(--sand)",
+                    transition: "background 0.15s",
+                  }}
+                  onMouseEnter={(e) => {
+                    if (s.id !== currentSessionId) e.currentTarget.style.background = "var(--cream2)";
+                  }}
+                  onMouseLeave={(e) => {
+                    if (s.id !== currentSessionId) e.currentTarget.style.background = "transparent";
+                  }}
+                >
+                  <span style={{ fontSize: 13 }}>💬</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontSize: "0.8rem", fontWeight: 600, color: "var(--ink)",
+                      whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                    }}>
+                      {s.title}
+                    </div>
+                    <div style={{ fontSize: "0.68rem", color: "var(--muted)", marginTop: 1 }}>
+                      {formatDate(s.updated_at)}
+                    </div>
+                  </div>
+                  <button
+                    onClick={(e) => deleteSession(e, s.id)}
+                    style={{
+                      background: "none", border: "none", color: "var(--muted)",
+                      cursor: "pointer", fontSize: 13, padding: "2px 4px",
+                      borderRadius: 4, flexShrink: 0,
+                    }}
+                  >🗑️</button>
+                </div>
+              ))
+            )}
           </div>
-          {msgs.length <= 1 && (
-            <div className="ai-quick-replies">
-              {QUICK_REPLIES.map(q => (
-                <button key={q} className="quick-reply" onClick={() => send(q)}>{q}</button>
-              ))}
-            </div>
-          )}
-          <div className="ai-input-row">
-            <input ref={inputRef} className="ai-input"
-              placeholder="e.g. Cheapest flights to London…"
-              value={inp} onChange={e => setInp(e.target.value)}
-              onKeyDown={e => e.key==="Enter" && !e.shiftKey && send()}/>
-            <button className="ai-send" onClick={() => send()} disabled={loading || !inp.trim()}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-              </svg>
-            </button>
+
+          {/* New conversation button */}
+          <div style={{ padding: "10px 14px", borderTop: "0.5px solid var(--sand)", flexShrink: 0 }}>
+            <button
+              onClick={() => { createNewSession(); setShowHistory(false); }}
+              style={{
+                width: "100%", background: "var(--terra)", color: "#fff",
+                border: "none", borderRadius: 8, padding: "9px",
+                fontSize: "0.78rem", fontWeight: 700, cursor: "pointer",
+                fontFamily: "var(--body)",
+              }}
+            >✏️ New Conversation</button>
           </div>
         </div>
       )}
-      <button className="ai-toggle" onClick={() => setOpen(p => !p)} title="Ask SkyBook AI">
+
+      {/* ── CHAT BOX ── */}
+      {open && (
+        <div className="ai-chat-box">
+
+          {/* Header */}
+          <div className="ai-chat-header">
+            <div className="ai-dot" />
+            <div style={{ flex: 1 }}>
+              <div className="ai-header-name">SkyBook AI Agent</div>
+              <div className="ai-header-sub">
+                {dbReady ? "Powered by Groq · History saved" : "Powered by Groq · Live Duffel data"}
+              </div>
+            </div>
+
+            {/* History toggle */}
+            <button
+              onClick={() => setShowHistory((p) => !p)}
+              title="Chat history"
+              style={{
+                background: showHistory ? "rgba(255,255,255,0.15)" : "rgba(255,255,255,0.08)",
+                border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer",
+                fontSize: 14, width: 28, height: 28, borderRadius: 6, marginRight: 4,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >🕐</button>
+
+            {/* New chat */}
+            <button
+              onClick={() => createNewSession()}
+              title="New chat"
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "none", color: "rgba(255,255,255,0.7)", cursor: "pointer",
+                fontSize: 14, width: 28, height: 28, borderRadius: 6, marginRight: 4,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >✏️</button>
+
+            <button className="ai-close-btn" onClick={() => setOpen(false)}>✕</button>
+          </div>
+
+          {/* DB error banner */}
+          {dbError && (
+            <div style={{
+              background: "#fff3cd", borderBottom: "1px solid #ffc107",
+              padding: "8px 14px", fontSize: "0.75rem", color: "#856404",
+            }}>
+              ⚠️ {dbError}
+            </div>
+          )}
+
+          {/* Messages */}
+          <div className="ai-messages">
+            {msgs.map((m, i) => (
+              <div key={i} className={`ai-msg ${m.role}`}>
+                {m.text}
+              </div>
+            ))}
+            {loading && (
+              <div className="ai-typing">
+                <span /><span /><span />
+              </div>
+            )}
+            <div ref={endRef} />
+          </div>
+
+          {/* Quick replies */}
+          {msgs.length <= 1 && (
+            <div className="ai-quick-replies">
+              {QUICK_REPLIES.map((q) => (
+                <button key={q} className="quick-reply" onClick={() => send(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="ai-input-row">
+            <input
+              ref={inputRef}
+              className="ai-input"
+              placeholder="e.g. Cheapest flights to London…"
+              value={inp}
+              onChange={(e) => setInp(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+            />
+            <button
+              className="ai-send"
+              onClick={() => send()}
+              disabled={loading || !inp.trim()}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" strokeWidth="2.5">
+                <line x1="22" y1="2" x2="11" y2="13" />
+                <polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            </button>
+          </div>
+
+        </div>
+      )}
+
+      <button
+        className="ai-toggle"
+        onClick={() => setOpen((p) => !p)}
+        title="Ask SkyBook AI"
+      >
         {open ? "✕" : "✈"}
       </button>
     </div>
@@ -2237,30 +2593,23 @@ function CompareDrawer({ flights, onClose }) {
     runCompare();
   }, []);
 
-  const runCompare = async () => {
-    const [a, b] = flights;
-    const prompt = `Compare these two flights and return ONLY valid JSON, no markdown, no extra text.
-Flight A: airline=${a.airline.name}, price=${a.price}, departure=${fmtTime(a.dep)}, duration=${a.duration}, stops=${a.stops}, cabin=${a.class}, baggage=${a.baggage}, meal=${a.meal ? "yes" : "no"}, refundable=${a.refundable ? "yes" : "no"}
-Flight B: airline=${b.airline.name}, price=${b.price}, departure=${fmtTime(b.dep)}, duration=${b.duration}, stops=${b.stops}, cabin=${b.class}, baggage=${b.baggage}, meal=${b.meal ? "yes" : "no"}, refundable=${b.refundable ? "yes" : "no"}
-Return this exact JSON shape:
-{"winner":"A or B","verdict":"2-3 sentence recommendation explaining which to pick and why, mentioning price difference and key advantages","flightA":{"score":0,"price_rating":"good/neutral/bad","duration_rating":"good/neutral/bad","baggage_rating":"good/neutral/bad","meal_rating":"good/neutral/bad","value_rating":"good/neutral/bad","summary":"one line"},"flightB":{"score":0,"price_rating":"good/neutral/bad","duration_rating":"good/neutral/bad","baggage_rating":"good/neutral/bad","meal_rating":"good/neutral/bad","value_rating":"good/neutral/bad","summary":"one line"}}`;
-
-    try {
-      const res = await fetch(`${API_BASE}/ai/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [{ role: "user", content: prompt }] }),
-      });
-      const data = await res.json();
-      const text = data.reply || "";
-      const clean = text.replace(/```json|```/g, "").trim();
-      setResult(JSON.parse(clean));
-    } catch {
-      setResult({ error: true });
-    }
-    setLoading(false);
-  };
-
+ // AFTER — uses its own dedicated endpoint:
+const runCompare = async () => {
+  const [a, b] = flights;
+  try {
+    const res = await fetch(`${API_BASE}/ai/compare`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ flight_a: a, flight_b: b }),
+    });
+    if (!res.ok) throw new Error("Compare failed");
+    const data = await res.json();
+    setResult(data);
+  } catch {
+    setResult({ error: true });
+  }
+  setLoading(false);
+};
   const rc = (r) => r === "good" ? "#1a6b3c" : r === "bad" ? "#c1440e" : "var(--ink)";
   const [a, b] = flights;
 
