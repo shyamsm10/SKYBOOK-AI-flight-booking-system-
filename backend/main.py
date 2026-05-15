@@ -769,7 +769,6 @@ async def predict_price(data: dict):
         print("Prediction error:", e)
         raise HTTPException(status_code=500, detail="Prediction failed")
 
-
 # ═══════════════════════════════════════════════════════════════
 # FLIGHT COMPARISON
 # ═══════════════════════════════════════════════════════════════
@@ -779,59 +778,120 @@ async def compare_flights(data: dict):
         flights = data.get("flights", [])
 
         if len(flights) < 2:
-            raise HTTPException(status_code=400, detail="Need at least 2 flights to compare")
+            raise HTTPException(
+                status_code=400,
+                detail="Need at least 2 flights to compare"
+            )
 
-        flight_info = ""
-        for i, f in enumerate(flights, 1):
-            airline_name = f.get("airline", {}).get("name", "Unknown Airline")
-            dep          = fmt_time(f.get("dep", "N/A"))
-            arr          = fmt_time(f.get("arr", "N/A"))
-            duration     = f.get("duration", "N/A")
-            stops        = fmt_stops(f.get("stops", 0))
-            price        = fmt_price(f.get("price", 0))
-            baggage      = f.get("baggage", "N/A")
-            refundable   = "Yes" if f.get("refundable") else "No"
-            cabin        = f.get("class", "Economy")
+        a = flights[0]
+        b = flights[1]
 
-            flight_info += f"""
-Flight {i} — {airline_name}
-  Departure : {dep}
-  Arrival   : {arr}
-  Duration  : {duration}
-  Stops     : {stops}
-  Price     : {price} per person
-  Cabin     : {cabin}
-  Baggage   : 1 checked bag · {baggage}
-  Refundable: {refundable}
+        # ── SIMPLE SCORING ENGINE ──────────────────────────────
+
+        def calc_score(f):
+
+            score = 100
+
+            # Price
+            price = float(f.get("price", 0))
+
+            if price > 12000:
+                score -= 20
+            elif price > 8000:
+                score -= 10
+
+            # Stops
+            stops = int(f.get("stops", 0))
+            score -= stops * 10
+
+            # Refundable
+            if not f.get("refundable"):
+                score -= 10
+
+            # Meal
+            if not f.get("meal"):
+                score -= 5
+
+            return max(score, 40)
+
+        scoreA = calc_score(a)
+        scoreB = calc_score(b)
+
+        winner = "A" if scoreA >= scoreB else "B"
+
+        # ── AI ANALYSIS ────────────────────────────────────────
+
+        def flight_summary(f, idx):
+            airline_name = (
+                f.get("airline", {}).get("name", "Unknown Airline")
+            )
+
+            return f"""
+Flight {idx} — {airline_name}
+Price: {fmt_price(f.get("price", 0))}
+Duration: {f.get("duration", "N/A")}
+Stops: {fmt_stops(f.get("stops", 0))}
+Baggage: {f.get("baggage", "N/A")}
+Refundable: {"Yes" if f.get("refundable") else "No"}
 """
 
-        prompt = f"""You are SkyBook, a premium flight comparison assistant.
-Compare the following flights side by side for a traveller deciding between them.
+        prompt = f"""
+Compare these two flights naturally.
 
-{flight_info}
+{flight_summary(a,1)}
 
-Write a concise, natural comparison (under 120 words). Cover price, duration, stops, baggage, and refund policy.
-End with one clear recommendation and a single specific reason.
-No bullet points. No emoji. No "I". No banned phrases like "Great choice!" or "Certainly!".
-Speak like a confident airline lounge agent."""
+{flight_summary(b,2)}
+
+Keep it concise under 100 words.
+End with one recommendation.
+"""
 
         response = groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": "You are SkyBook, a concise and professional flight comparison assistant."},
-                {"role": "user", "content": prompt},
+                {
+                    "role": "system",
+                    "content": "You are a professional flight comparison assistant."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
             ],
-            max_tokens=300,
+            max_tokens=180,
             temperature=0.5,
         )
 
         analysis = response.choices[0].message.content.strip()
-        print(f"Compare OK: {len(flights)} flights analysed")
-        return {"analysis": analysis}
 
-    except HTTPException:
-        raise
+        # ── RESPONSE ───────────────────────────────────────────
+
+        return {
+            "success": True,
+
+            "winner": winner,
+
+            "flightA": {
+                "score": scoreA,
+                "duration_rating": "good" if a.get("stops",0) == 0 else "bad",
+                "baggage_rating": "good",
+                "meal_rating": "good" if a.get("meal") else "bad",
+            },
+
+            "flightB": {
+                "score": scoreB,
+                "duration_rating": "good" if b.get("stops",0) == 0 else "bad",
+                "baggage_rating": "good",
+                "meal_rating": "good" if b.get("meal") else "bad",
+            },
+
+            "verdict": analysis
+        }
+
     except Exception as e:
-        print("Compare error:", e)
-        raise HTTPException(status_code=500, detail="Could not analyse flights. Please try again.")
-    
+        print("COMPARE ERROR:", str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Compare failed: {str(e)}"
+        )
