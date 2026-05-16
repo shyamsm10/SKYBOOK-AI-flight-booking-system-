@@ -887,6 +887,7 @@ End with one recommendation.
 
             "verdict": analysis
         }
+        
 
     except Exception as e:
         print("COMPARE ERROR:", str(e))
@@ -895,3 +896,62 @@ End with one recommendation.
             status_code=500,
             detail=f"Compare failed: {str(e)}"
         )
+    # ═══════════════════════════════════════════════════════════════
+# AI CHAT WITH FLIGHTS
+# ═══════════════════════════════════════════════════════════════
+@app.post("/ai/chat-with-flights")
+async def chat_with_flights(request: dict):
+    try:
+        messages  = request.get("messages", [])
+        if not messages:
+            return {"reply": "Happy to help — which route are you looking at?", "flights": []}
+
+        user_text = messages[-1].get("content", "").strip()
+
+        if is_off_topic(user_text):
+            return {"reply": "Flight bookings are my lane — what route can I sort out for you?", "flights": []}
+
+        flights        = []
+        flight_context = ""
+
+        if needs_flight_search(user_text):
+            details   = extract_flight_details(user_text)
+            from_city = details.get("from_city")
+            to_city   = details.get("to_city")
+            date      = details.get("date")
+            pax       = details.get("pax") or 1
+            cabin     = details.get("cabin") or "economy"
+
+            if from_city == "INVALID" or to_city == "INVALID":
+                return {"reply": "We don't travel to those destinations — what's your actual route?", "flights": []}
+
+            if from_city and to_city and not date:
+                date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+            if from_city and to_city and date:
+                flights        = get_flights(from_city, to_city, date, pax, cabin)
+                flight_context = format_flights_for_ai(flights, from_city, to_city, date)
+
+        groq_messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        for i, m in enumerate(messages):
+            role    = "assistant" if m["role"] == "assistant" else "user"
+            content = m["content"]
+            if i == len(messages) - 1 and flight_context:
+                content += "\n\n[LIVE DATA]\n" + flight_context
+            groq_messages.append({"role": role, "content": content})
+
+        response = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=groq_messages,
+            max_tokens=500,
+            temperature=0.72,
+        )
+
+        return {
+            "reply":   response.choices[0].message.content.strip(),
+            "flights": flights[:4],
+        }
+
+    except Exception as e:
+        print("chat_with_flights error:", e)
+        return {"reply": "Something went wrong on my end. Try again in a moment.", "flights": []}
