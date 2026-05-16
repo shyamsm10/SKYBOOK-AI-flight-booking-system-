@@ -1,10 +1,44 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import ReactDOM from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 const API_BASE = "https://skybook-ai-flight-booking-system.onrender.com";
 const GOOGLE_CLIENT_ID = "164546349235-i7eg4h4lrako81vmiooejdigjka6c1lu.apps.googleusercontent.com";
 const SUPABASE_URL = "https://uhjuesjqzrfagmbpfczb.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JY60rZfPfsGCnSr3pUsB5w_5ZpM499H";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const CITY_MAP = {
+  DEL: "New Delhi",
+  BOM: "Mumbai",
+  BLR: "Bengaluru",
+  HYD: "Hyderabad",
+  MAA: "Chennai",
+  CCU: "Kolkata",
+  COK: "Kochi",
+  GOI: "Goa",
+  PNQ: "Pune",
+  AMD: "Ahmedabad",
+  JAI: "Jaipur",
+  LKO: "Lucknow",
+  ATQ: "Amritsar",
+  IXC: "Chandigarh",
+  GAU: "Guwahati",
+  BBI: "Bhubaneswar",
+  VTZ: "Visakhapatnam",
+  TRV: "Thiruvananthapuram",
+  DXB: "Dubai",
+  SIN: "Singapore",
+  BKK: "Bangkok",
+  LHR: "London",
+  JFK: "New York",
+  SYD: "Sydney",
+  KUL: "Kuala Lumpur",
+  HKG: "Hong Kong",
+  DOH: "Doha",
+  AUH: "Abu Dhabi",
+  CDG: "Paris",
+  FRA: "Frankfurt",
+};
 
 // ── FONTS & GLOBAL STYLES ─────────────────────────────────────────────────
 const GlobalStyles = () => (
@@ -255,14 +289,14 @@ const GlobalStyles = () => (
       background: var(--white); color: var(--terra);
       box-shadow: 0 1px 6px rgba(0,0,0,0.10);
     }
-    .search-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr 1fr 100px 160px 160px;
-      gap: 10px; align-items: end;
-    }
-    .search-grid.one-way {
-      grid-template-columns: 1fr 1fr 1fr 100px 160px 160px;
-    }
+  .search-grid {
+  display: grid;
+  grid-template-columns: 1fr 36px 1fr 1fr 1fr 100px 160px 160px;  /* added 36px */
+  gap: 10px; align-items: end;
+}
+.search-grid.one-way {
+  grid-template-columns: 1fr 36px 1fr 1fr 100px 160px 160px;  /* added 36px */
+}
     @media (max-width: 960px) {
       .search-grid, .search-grid.one-way { grid-template-columns: 1fr 1fr; }
       .hero-content { padding: 140px 24px 0; }
@@ -1000,24 +1034,46 @@ const GlobalStyles = () => (
   `}</style>
 );
 // ── DATA ──────────────────────────────────────────────────────────────────
-const CITY_MAP = {
-  BOM:"Mumbai",DEL:"Delhi",BLR:"Bangalore",MAA:"Chennai",HYD:"Hyderabad",CCU:"Kolkata",COK:"Kochi",
-  AMD:"Ahmedabad",GOI:"Goa",PNQ:"Pune",ATQ:"Amritsar",JAI:"Jaipur",LKO:"Lucknow",IXC:"Chandigarh",
-  TRV:"Trivandrum",IXM:"Madurai",IXB:"Bagdogra",PAT:"Patna",BBI:"Bhubaneswar",VNS:"Varanasi",
-  DXB:"Dubai",AUH:"Abu Dhabi",SHJ:"Sharjah",DOH:"Doha",KWI:"Kuwait",MCT:"Muscat",
-  RUH:"Riyadh",JED:"Jeddah",BAH:"Bahrain",
-  LHR:"London",LGW:"London Gatwick",MAN:"Manchester",CDG:"Paris",FRA:"Frankfurt",
-  AMS:"Amsterdam",MAD:"Madrid",BCN:"Barcelona",FCO:"Rome",ZRH:"Zurich",
-  VIE:"Vienna",IST:"Istanbul",DUB:"Dublin",
-  JFK:"New York",LGA:"New York LGA",EWR:"Newark",LAX:"Los Angeles",SFO:"San Francisco",
-  ORD:"Chicago",ATL:"Atlanta",DFW:"Dallas",SEA:"Seattle",MIA:"Miami",BOS:"Boston",
-  IAH:"Houston",DEN:"Denver",PHX:"Phoenix",LAS:"Las Vegas",MCO:"Orlando",
-  YYZ:"Toronto",YVR:"Vancouver",YUL:"Montreal",
-  SIN:"Singapore",KUL:"Kuala Lumpur",BKK:"Bangkok",HKG:"Hong Kong",
-  ICN:"Seoul",NRT:"Tokyo",HND:"Tokyo Haneda",PEK:"Beijing",PVG:"Shanghai",
-  DPS:"Bali",CGK:"Jakarta",MNL:"Manila",
-  SYD:"Sydney",MEL:"Melbourne",BNE:"Brisbane",PER:"Perth",AKL:"Auckland"
-};
+const AIRPORTS = [
+  { code: "DEL", city: "New Delhi",     country: "India",       name: "Indira Gandhi International Airport" },
+  { code: "BOM", city: "Mumbai",        country: "India",       name: "Chhatrapati Shivaji Maharaj International Airport" },
+  { code: "BLR", city: "Bengaluru",     country: "India",       name: "Kempegowda International Airport" },
+  { code: "HYD", city: "Hyderabad",     country: "India",       name: "Rajiv Gandhi International Airport" },
+  { code: "MAA", city: "Chennai",       country: "India",       name: "Chennai International Airport" },
+  { code: "CCU", city: "Kolkata",       country: "India",       name: "Netaji Subhash Chandra Bose International Airport" },
+  { code: "COK", city: "Kochi",         country: "India",       name: "Cochin International Airport" },
+  { code: "PNQ", city: "Pune",          country: "India",       name: "Pune Airport" },
+  { code: "AMD", city: "Ahmedabad",     country: "India",       name: "Sardar Vallabhbhai Patel International Airport" },
+  { code: "GOI", city: "Goa",           country: "India",       name: "Goa International Airport" },
+  { code: "JAI", city: "Jaipur",        country: "India",       name: "Jaipur International Airport" },
+  { code: "LKO", city: "Lucknow",       country: "India",       name: "Chaudhary Charan Singh International Airport" },
+  { code: "ATQ", city: "Amritsar",      country: "India",       name: "Sri Guru Ram Dass Jee International Airport" },
+  { code: "IXC", city: "Chandigarh",    country: "India",       name: "Chandigarh Airport" },
+  { code: "NAG", city: "Nagpur",        country: "India",       name: "Dr. Babasaheb Ambedkar International Airport" },
+  { code: "TRV", city: "Trivandrum",    country: "India",       name: "Trivandrum International Airport" },
+  { code: "IXM", city: "Madurai",       country: "India",       name: "Madurai Airport" },
+  { code: "VNS", city: "Varanasi",      country: "India",       name: "Lal Bahadur Shastri International Airport" },
+  { code: "DXB", city: "Dubai",         country: "UAE",         name: "Dubai International Airport" },
+  { code: "AUH", city: "Abu Dhabi",     country: "UAE",         name: "Abu Dhabi International Airport" },
+  { code: "SHJ", city: "Sharjah",       country: "UAE",         name: "Sharjah International Airport" },
+  { code: "DOH", city: "Doha",          country: "Qatar",       name: "Hamad International Airport" },
+  { code: "MCT", city: "Muscat",        country: "Oman",        name: "Muscat International Airport" },
+  { code: "RUH", city: "Riyadh",        country: "Saudi Arabia",name: "King Khalid International Airport" },
+  { code: "JED", city: "Jeddah",        country: "Saudi Arabia",name: "King Abdulaziz International Airport" },
+  { code: "SIN", city: "Singapore",     country: "Singapore",   name: "Changi Airport" },
+  { code: "KUL", city: "Kuala Lumpur",  country: "Malaysia",    name: "Kuala Lumpur International Airport" },
+  { code: "BKK", city: "Bangkok",       country: "Thailand",    name: "Suvarnabhumi Airport" },
+  { code: "LHR", city: "London",        country: "UK",          name: "Heathrow Airport" },
+  { code: "CDG", city: "Paris",         country: "France",      name: "Charles de Gaulle Airport" },
+  { code: "FRA", city: "Frankfurt",     country: "Germany",     name: "Frankfurt Airport" },
+  { code: "JFK", city: "New York",      country: "USA",         name: "John F. Kennedy International Airport" },
+  { code: "LAX", city: "Los Angeles",   country: "USA",         name: "Los Angeles International Airport" },
+  { code: "SYD", city: "Sydney",        country: "Australia",   name: "Sydney Kingsford Smith Airport" },
+  { code: "NRT", city: "Tokyo",         country: "Japan",       name: "Narita International Airport" },
+  { code: "CMB", city: "Colombo",       country: "Sri Lanka",   name: "Bandaranaike International Airport" },
+  { code: "KTM", city: "Kathmandu",     country: "Nepal",       name: "Tribhuvan International Airport" },
+  { code: "MLE", city: "Malé",          country: "Maldives",    name: "Velana International Airport" },
+];
 
 const QUICK_REPLIES = [
   "Flights from Delhi to Dubai tomorrow",
@@ -1373,25 +1429,50 @@ async function askPricePredictor(route, date, cabin, currentPrice) {
   }
 }
 
+ 
 async function fetchFlights(fromCity, toCity, date, pax = 1, cabin = "economy") {
-  const params = new URLSearchParams({ from_city: fromCity, to_city: toCity, date, pax, cabin });
-  const res = await fetch(`${API_BASE}/flights/search?${params}`);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "No flights found");
-  }
-  return res.json();
-}
-
-async function askAI(messages) {
   try {
-    const res = await fetch(`${API_BASE}/ai/chat`, {
+    const params = new URLSearchParams({
+      from_city: fromCity,
+      to_city:   toCity,
+      date,
+      pax:       String(pax),
+      cabin,
+    });
+ 
+    const res = await fetch(`${API_BASE}/flights/search?${params}`);
+ 
+    // Backend returns 404 when no flights found — treat as empty, not a crash
+    if (res.status === 404) return [];
+ 
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Server error ${res.status}`);
+    }
+ 
+    const data = await res.json();
+ 
+    // Always return an array — never undefined/null
+    return Array.isArray(data) ? data : [];
+ 
+  } catch (err) {
+    console.error("fetchFlights error:", err);
+    // Re-throw so ResultsPage catch block shows the error message
+    throw err;
+  }
+}
+async function askAI(messages, onFlightsReceived) {
+  try {
+    const res = await fetch(`${API_BASE}/ai/chat-with-flights`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ messages }),
     });
     if (!res.ok) throw new Error("AI error");
     const data = await res.json();
+    if (data.flights?.length > 0 && onFlightsReceived) {
+      onFlightsReceived(data.flights);
+    }
     return data.reply || "Sorry, I couldn't get a response.";
   } catch (e) {
     return "⚠️ AI service temporarily unavailable. Please try again shortly.";
@@ -1443,10 +1524,24 @@ async function confirmBooking(offerId, passenger, flight, paymentId) {
 
 // ── UTILS ─────────────────────────────────────────────────────────────────
 function fmtTime(raw) {
-  if (!raw) return "N/A";
-  if (raw.includes("T")) return raw.split("T")[1]?.slice(0, 5);
-  return raw.slice(11, 16) || raw;
+  if (!raw || raw === "N/A") return "—";
+  try {
+    // Handles both "2026-05-16 06:30" and "2026-05-16T06:30:00"
+    const normalised = raw.replace(" ", "T");
+    const d = new Date(normalised);
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleTimeString("en-IN", {
+        hour: "2-digit", minute: "2-digit", hour12: true
+      });
+    }
+    // Last resort: grab HH:MM from wherever it is
+    const match = raw.match(/\d{2}:\d{2}/);
+    return match ? match[0] : raw;
+  } catch {
+    return raw;
+  }
 }
+ 
 function fmtDate(raw) {
   if (!raw) return "";
   return raw.slice(0, 10);
@@ -1753,10 +1848,181 @@ function Nav({ user, onSignIn, onSignOut, onHome }) {
     </nav>
   );
 }
+  //Airport function
+function AirportField({ label, value, onChange, placeholder, excludeCode }) {
+  const [query, setQuery]     = useState("");
+  const [open, setOpen]       = useState(false);
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 380 });
+  const wrapRef               = useRef(null);
+  const inputRef              = useRef(null);
 
-// ── SEARCH FORM ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (value) {
+      const found = AIRPORTS.find(a => a.code === value);
+      setQuery(found ? `${found.code}, ${found.city}` : value);
+    } else {
+      setQuery("");
+    }
+  }, [value]);
+
+  const updatePos = useCallback(() => {
+    if (wrapRef.current) {
+      const rect = wrapRef.current.getBoundingClientRect();
+      setDropPos({
+        top:   rect.bottom + window.scrollY + 6,
+        left:  rect.left + window.scrollX,
+        width: Math.max(rect.width, 380),
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (open) {
+      updatePos();
+      window.addEventListener("scroll", updatePos, true);
+      window.addEventListener("resize", updatePos);
+      return () => {
+        window.removeEventListener("scroll", updatePos, true);
+        window.removeEventListener("resize", updatePos);
+      };
+    }
+  }, [open, updatePos]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        wrapRef.current && !wrapRef.current.contains(e.target) &&
+        !document.getElementById("airport-portal")?.contains(e.target)
+      ) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = query.trim().length === 0
+    ? AIRPORTS.filter(a => a.code !== excludeCode).slice(0, 7)
+    : AIRPORTS.filter(a =>
+        a.code !== excludeCode && (
+          a.code.toLowerCase().includes(query.toLowerCase()) ||
+          a.city.toLowerCase().includes(query.toLowerCase()) ||
+          a.country.toLowerCase().includes(query.toLowerCase()) ||
+          a.name.toLowerCase().includes(query.toLowerCase())
+        )
+      ).slice(0, 7);
+
+  const handleSelect = (airport) => {
+    setQuery(`${airport.code}, ${airport.city}`);
+    onChange(airport.code);
+    setOpen(false);
+  };
+
+  // Get or create portal root
+  const getPortalRoot = () => {
+    let el = document.getElementById("airport-portal");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "airport-portal";
+      el.style.cssText = "position:absolute;top:0;left:0;width:100%;z-index:99999;pointer-events:none;";
+      document.body.appendChild(el);
+    }
+    return el;
+  };
+
+  const dropdown = open && filtered.length > 0
+    ? ReactDOM.createPortal(
+        <div style={{
+          position:     "absolute",
+          top:          dropPos.top,
+          left:         dropPos.left,
+          width:        dropPos.width,
+          zIndex:       99999,
+          background:   "#fff",
+          border:       "1.5px solid #e8ddd0",
+          borderRadius: 16,
+          boxShadow:    "0 16px 48px rgba(0,0,0,0.22)",
+          overflow:     "hidden",
+          pointerEvents:"all",
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: "10px 16px 8px",
+            fontSize: "0.65rem", fontWeight: 700,
+            textTransform: "uppercase", letterSpacing: "0.1em",
+            color: "#a08060", borderBottom: "1px solid #f3ede6",
+            background: "#fdf9f5",
+          }}>
+            Popular airports
+          </div>
+
+          {filtered.map((airport) => (
+            <div
+              key={airport.code}
+              onMouseDown={(e) => { e.preventDefault(); handleSelect(airport); }}
+              style={{
+                display: "flex", alignItems: "center", gap: 14,
+                padding: "11px 16px", cursor: "pointer",
+                borderBottom: "0.5px solid #f5efe8",
+                transition: "background 0.1s", background: "transparent",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "#fdf6f0"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <div style={{
+                width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                background: "linear-gradient(135deg, #f5ede4, #fceee4)",
+                border: "1px solid #f0ddd0",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontWeight: 800, fontSize: "0.75rem", color: "#c1622f",
+                letterSpacing: "0.06em",
+              }}>
+                {airport.code}
+              </div>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{
+                  fontWeight: 700, fontSize: "0.88rem", color: "#1a0f0a",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {airport.city}
+                  <span style={{ fontWeight: 400, color: "#a08060", marginLeft: 6, fontSize: "0.8rem" }}>
+                    {airport.country}
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: "0.72rem", color: "#b09070", marginTop: 2,
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {airport.name}
+                </div>
+              </div>
+              <div style={{ fontSize: "0.85rem", color: "#e8c8a8", flexShrink: 0 }}>✈</div>
+            </div>
+          ))}
+        </div>,
+        getPortalRoot()
+      )
+    : null;
+
+  return (
+    <div className="search-field" ref={wrapRef}>
+      <label className="search-label">{label}</label>
+      <input
+        ref={inputRef}
+        className="search-input"
+        placeholder={placeholder}
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChange(""); setOpen(true); }}
+        onFocus={() => { setOpen(true); updatePos(); }}
+        autoComplete="off"
+      />
+      {dropdown}
+    </div>
+  );
+}
+// Search form
 function SearchForm({ onSearch, compact = false }) {
-  const today = new Date().toISOString().split("T")[0];
+  const today    = new Date().toISOString().split("T")[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
   const [form, setForm] = useState({
     from: "", to: "", date: today, returnDate: tomorrow,
@@ -1764,9 +2030,11 @@ function SearchForm({ onSearch, compact = false }) {
   });
   const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  const handleSwap = () => setForm(p => ({ ...p, from: p.to, to: p.from }));
+
   const submit = () => {
-    if (!form.from.trim() || !form.to.trim() || !form.date) {
-      alert("Please fill in From, To, and Date."); return;
+    if (!form.from || !form.to || !form.date) {
+      alert("Please select From and To airports, and a departure date."); return;
     }
     if (form.type === "round-trip" && !form.returnDate) {
       alert("Please select a return date."); return;
@@ -1783,28 +2051,68 @@ function SearchForm({ onSearch, compact = false }) {
     <div className={compact ? "" : "search-section"}>
       <div className="search-card">
         <div className="search-tabs">
-          {["one-way","round-trip"].map(t => (
-            <button key={t} className={`tab-btn ${form.type===t?"active":""}`} onClick={() => set("type",t)}>
-              {t==="one-way" ? "One Way" : "Round Trip"}
+          {["one-way", "round-trip"].map(t => (
+            <button key={t} className={`tab-btn ${form.type === t ? "active" : ""}`}
+              onClick={() => set("type", t)}>
+              {t === "one-way" ? "One Way" : "Round Trip"}
             </button>
           ))}
         </div>
+
         <div className={`search-grid ${isRoundTrip ? "" : "one-way"}`}>
-          <div className="search-field">
-            <label className="search-label">From</label>
-            <input className="search-input" placeholder="DEL, Mumbai…"
-              value={form.from} onChange={e => set("from", e.target.value.toUpperCase())} />
-          </div>
-          <div className="search-field">
-            <label className="search-label">To</label>
-            <input className="search-input" placeholder="BOM, Dubai…"
-              value={form.to} onChange={e => set("to", e.target.value.toUpperCase())} />
-          </div>
+
+          {/* FROM */}
+          <AirportField
+            label="From"
+            value={form.from}
+            onChange={code => set("from", code)}
+            placeholder="City or code…"
+            excludeCode={form.to}
+          />
+
+          {/* SWAP */}
+<div style={{ display:"flex", alignItems:"flex-end", paddingBottom: 5, justifyContent:"center" }}>
+  <button
+    type="button"
+    onClick={handleSwap}
+    title="Swap airports"
+    style={{
+      width: 38, height: 38, borderRadius: "50%",
+      background: "#f5ede4", border: "1.5px solid #e0c8b0",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      cursor: "pointer", color: "#c1622f", fontSize: "1.1rem",
+      transition: "all 0.18s", flexShrink: 0,
+      boxShadow: "0 2px 8px rgba(193,98,47,0.15)",
+    }}
+    onMouseEnter={e => {
+      e.currentTarget.style.background = "#c1622f";
+      e.currentTarget.style.color = "#fff";
+      e.currentTarget.style.transform = "rotate(180deg)";
+    }}
+    onMouseLeave={e => {
+      e.currentTarget.style.background = "#f5ede4";
+      e.currentTarget.style.color = "#c1622f";
+      e.currentTarget.style.transform = "rotate(0deg)";
+    }}
+  >⇄</button>
+</div>
+          {/* TO */}
+          <AirportField
+            label="To"
+            value={form.to}
+            onChange={code => set("to", code)}
+            placeholder="City or code…"
+            excludeCode={form.from}
+          />
+
+          {/* DEPART */}
           <div className="search-field">
             <label className="search-label">Depart</label>
             <input type="date" className="search-input" min={today}
               value={form.date} onChange={e => set("date", e.target.value)} />
           </div>
+
+          {/* RETURN — only for round trip */}
           {isRoundTrip && (
             <div className="search-field">
               <label className="search-label">Return</label>
@@ -1812,20 +2120,26 @@ function SearchForm({ onSearch, compact = false }) {
                 value={form.returnDate} onChange={e => set("returnDate", e.target.value)} />
             </div>
           )}
+
+          {/* PAX */}
           <div className="search-field">
             <label className="search-label">Pax</label>
             <input type="number" className="search-input" min={1} max={9}
-              value={form.pax} onChange={e => set("pax", parseInt(e.target.value)||1)} />
+              value={form.pax} onChange={e => set("pax", parseInt(e.target.value) || 1)} />
           </div>
+
+          {/* CABIN */}
           <div className="search-field">
             <label className="search-label">Cabin</label>
-            <select className="search-input" value={form.cabin} onChange={e => set("cabin", e.target.value)}>
+            <select className="search-input" value={form.cabin}
+              onChange={e => set("cabin", e.target.value)}>
               <option value="economy">Economy</option>
               <option value="premium_economy">Premium Economy</option>
               <option value="business">Business</option>
               <option value="first">First Class</option>
             </select>
           </div>
+
           <button className="search-btn" onClick={submit}>Search ✈️</button>
         </div>
       </div>
@@ -1833,58 +2147,79 @@ function SearchForm({ onSearch, compact = false }) {
   );
 }
 function FlightCard({ flight, onSelect, onToggleCompare, isCompareChecked }) {
-  const displayPrice = flight.price > 100000 ? flight.price / 100 : flight.price;
-
+  // Guard: if flight object is bad, render nothing instead of crashing
+  if (!flight || typeof flight !== "object") return null;
+ 
+  // Safe price — backend rounds it, never needs /100
+  const price = Number(flight.price ?? 0);
+ 
+  // Safe airline fields
+  const airlineName = flight?.airline?.name ?? "Unknown Airline";
+  const airlineCode = flight?.airline?.code ?? "";
+ 
+  const isBest = Boolean(flight.best);
+ 
   return (
-    <div className={`flight-card ${flight.best ? "best" : ""} ${isCompareChecked ? "compare-checked" : ""}`}>
-      {flight.best && <div className="best-tag">✦ Best Value</div>}
-
+    <div className={`flight-card ${isBest ? "best" : ""} ${isCompareChecked ? "compare-checked" : ""}`}>
+      {isBest && <div className="best-tag">✦ Best Value</div>}
+ 
       <div className="fc-main">
+ 
+        {/* Airline */}
         <div className="airline-info">
           <div className="airline-logo">✈️</div>
           <div>
-            <div className="airline-name">{flight.airline.name}</div>
-            <div className="airline-no">{flight.airline.code} · {flight.class}</div>
+            <div className="airline-name">{airlineName}</div>
+            <div className="airline-no">
+              {airlineCode ? `${airlineCode} · ` : ""}{flight.class ?? "Economy"}
+            </div>
           </div>
         </div>
-
+ 
+        {/* Route */}
         <div className="route-viz">
           <div className="route-end">
-            <div className="route-iata">{flight.from}</div>
-            <div className="route-city">{CITY_MAP[flight.from] || flight.from}</div>
+            <div className="route-iata">{flight.from ?? "—"}</div>
+            <div className="route-city">{CITY_MAP?.[flight.from] ?? flight.from ?? ""}</div>
             <div className="route-time">{fmtTime(flight.dep)}</div>
           </div>
           <div className="route-mid">
-            <div className="route-dur">{flight.duration}</div>
+            <div className="route-dur">{flight.duration ?? "—"}</div>
             <div className="route-line" />
-            <div className="route-stops">{flight.stops === 0 ? "Non-stop ✈" : `${flight.stops} stop`}</div>
+            <div className="route-stops">
+              {(flight.stops ?? 0) === 0 ? "Non-stop ✈" : `${flight.stops} stop`}
+            </div>
           </div>
           <div className="route-end">
-            <div className="route-iata">{flight.to}</div>
-            <div className="route-city">{CITY_MAP[flight.to] || flight.to}</div>
+            <div className="route-iata">{flight.to ?? "—"}</div>
+            <div className="route-city">{CITY_MAP?.[flight.to] ?? flight.to ?? ""}</div>
             <div className="route-time">{fmtTime(flight.arr)}</div>
           </div>
         </div>
-
+ 
+        {/* Price */}
         <div className="price-block">
-          <div className="price-val">₹ {Number(displayPrice).toLocaleString("en-IN")}</div>
+          <div className="price-val">₹ {price.toLocaleString("en-IN")}</div>
           <div className="price-pp">per person</div>
-          <button className="select-btn" onClick={() => onSelect(flight)}>Select →</button>
+          <button className="select-btn" onClick={() => onSelect?.(flight)}>
+            Select →
+          </button>
         </div>
       </div>
-
+ 
+      {/* Tags */}
       <div className="fc-tags">
-        {flight.stops === 0 && <span className="tag tag-green">Non-stop</span>}
-        {flight.meal && <span className="tag tag-warm">Meal included</span>}
+        {(flight.stops ?? 0) === 0 && <span className="tag tag-green">Non-stop</span>}
+        {flight.meal       && <span className="tag tag-warm">Meal included</span>}
         {flight.refundable && <span className="tag tag-green">Refundable</span>}
-        <span className="tag tag-grey">🧳 {flight.baggage}</span>
-        <span className="tag tag-grey">{flight.class}</span>
-
-        {/* ── COMPARE TOGGLE ── */}
+        <span className="tag tag-grey">🧳 {flight.baggage ?? "—"}</span>
+        <span className="tag tag-grey">{flight.class ?? "Economy"}</span>
+ 
         <button
-          onClick={(e) => { e.stopPropagation(); onToggleCompare(flight); }}
+          onClick={(e) => { e.stopPropagation(); onToggleCompare?.(flight); }}
           style={{
-            marginLeft: "auto", background: isCompareChecked ? "var(--terra)" : "none",
+            marginLeft: "auto",
+            background: isCompareChecked ? "var(--terra)" : "none",
             border: `1.5px solid ${isCompareChecked ? "var(--terra)" : "var(--sand)"}`,
             color: isCompareChecked ? "#fff" : "var(--muted)",
             borderRadius: 20, fontSize: "0.72rem", fontWeight: 700,
@@ -2162,9 +2497,63 @@ async function dbAddMessage(sessionId, role, content) {
   if (error) throw new Error(error.message);
   return data[0];
 }
+//chat flight card
+function ChatFlightCard({ flight, onBook }) {
+  const price = Number(flight.price ?? 0);
+  const stops = flight.stops ?? 0;
+  return (
+    <div style={{
+      background: "#fff", border: "1.5px solid #e8d5c0",
+      borderRadius: 12, padding: "12px 14px", marginTop: 8,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#1a0f0a" }}>
+            {flight.airline?.name ?? "Unknown"}
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "#a07850" }}>
+            {flight.class ?? "Economy"} · {stops === 0 ? "Non-stop" : `${stops} stop`}
+          </div>
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontWeight: 800, fontSize: "1rem", color: "#c1622f" }}>
+            ₹{price.toLocaleString("en-IN")}
+          </div>
+          <div style={{ fontSize: "0.68rem", color: "#a07850" }}>per person</div>
+        </div>
+      </div>
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8,
+        background: "#fdf8f3", borderRadius: 8, padding: "8px 10px", marginBottom: 10,
+      }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{flight.from}</div>
+          <div style={{ fontSize: "0.68rem", color: "#a07850" }}>{fmtTime(flight.dep)}</div>
+        </div>
+        <div style={{ flex: 1, textAlign: "center", fontSize: "0.65rem", color: "#a07850" }}>
+          ─── ✈ ───<br/>{flight.duration ?? "—"}
+        </div>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontWeight: 700, fontSize: "0.9rem" }}>{flight.to}</div>
+          <div style={{ fontSize: "0.68rem", color: "#a07850" }}>{fmtTime(flight.arr)}</div>
+        </div>
+      </div>
+      <button
+        onClick={() => onBook(flight)}
+        style={{
+          width: "100%", background: "linear-gradient(135deg, #d4783a, #b45309)",
+          color: "#fff", border: "none", borderRadius: 8,
+          padding: "8px", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer",
+        }}
+      >
+        ✈ Book This Flight
+      </button>
+    </div>
+  );
+}
 
 // ── AI CHAT ───────────────────────────────────────────────────────────────
-function AiChat() {
+function AiChat({ user, onSignIn, onSelect }) {
   const [open, setOpen]                   = useState(false);
   const [msgs, setMsgs]                   = useState(null);
   const [inp, setInp]                     = useState("");
@@ -2253,45 +2642,48 @@ function AiChat() {
   }, [open]);
 
   const send = useCallback(
-    async (text) => {
-      const txt = (text || inp).trim();
-      if (!txt || loading || !msgs) return;
-      setInp("");
-      setLoading(true);
-      const userMsg = { role: "user", text: txt };
-      const newMsgs = [...msgs, userMsg];
-      setMsgs(newMsgs);
-      if (dbReady && currentSessionId !== "local") {
-        try {
-          await dbAddMessage(currentSessionId, "user", txt);
-          const firstUser = newMsgs.find((m) => m.role === "user");
-          if (firstUser) {
-            const title = firstUser.text.slice(0, 60) + (firstUser.text.length > 60 ? "…" : "");
-            await dbUpdateSession(currentSessionId, { title });
-            setSessions((prev) =>
-              prev.map((s) => (s.id === currentSessionId ? { ...s, title } : s))
-            );
-          }
-        } catch {}
-      }
-      const history = newMsgs
-        .filter((_, i) => i > 0)
-        .map((m) => ({ role: m.role === "bot" ? "assistant" : "user", content: m.text }));
-      const reply = await askAI(history);
-      const botMsg = { role: "bot", text: reply };
-      setMsgs((prev) => [...prev, botMsg]);
-      if (dbReady && currentSessionId !== "local") {
-        try {
-          await dbAddMessage(currentSessionId, "bot", reply);
-          await dbUpdateSession(currentSessionId, {});
-          const updated = await dbGetSessions(getBrowserId());
-          setSessions(updated);
-        } catch {}
-      }
-      setLoading(false);
-    },
-    [inp, msgs, loading, currentSessionId, dbReady]
-  );
+  async (text) => {
+    const txt = (text || inp).trim();
+    if (!txt || loading || !msgs) return;
+    setInp("");
+    setLoading(true);
+    const userMsg = { role: "user", text: txt };
+    const newMsgs = [...msgs, userMsg];
+    setMsgs(newMsgs);
+    if (dbReady && currentSessionId !== "local") {
+      try {
+        await dbAddMessage(currentSessionId, "user", txt);
+        const firstUser = newMsgs.find((m) => m.role === "user");
+        if (firstUser) {
+          const title = firstUser.text.slice(0, 60) + (firstUser.text.length > 60 ? "…" : "");
+          await dbUpdateSession(currentSessionId, { title });
+          setSessions((prev) =>
+            prev.map((s) => (s.id === currentSessionId ? { ...s, title } : s))
+          );
+        }
+      } catch {}
+    }
+    const history = newMsgs
+      .filter((_, i) => i > 0)
+      .filter((m) => m.role !== "flights")
+      .map((m) => ({ role: m.role === "bot" ? "assistant" : "user", content: m.text ?? "" }));
+    const reply = await askAI(history, (flights) => {
+      setMsgs(prev => [...prev, { role: "flights", flights }]);
+    });
+    const botMsg = { role: "bot", text: reply };
+    setMsgs((prev) => [...prev, botMsg]);
+    if (dbReady && currentSessionId !== "local") {
+      try {
+        await dbAddMessage(currentSessionId, "bot", reply);
+        await dbUpdateSession(currentSessionId, {});
+        const updated = await dbGetSessions(getBrowserId());
+        setSessions(updated);
+      } catch {}
+    }
+    setLoading(false);
+  },
+  [inp, msgs, loading, currentSessionId, dbReady]
+);
 
   const formatDate = (ts) =>
     new Date(ts).toLocaleDateString("en-IN", {
@@ -2455,11 +2847,24 @@ function AiChat() {
 
           {/* Messages */}
           <div className="ai-messages">
-            {msgs.map((m, i) => (
-              <div key={i} className={`ai-msg ${m.role}`}>
-                {m.text}
-              </div>
-            ))}
+           {msgs.map((m, i) =>
+  m.role === "flights"
+    ? <div key={i}>
+        {m.flights.map((f, j) => (
+          <ChatFlightCard
+            key={j}
+            flight={f}
+            onBook={(flight) => {
+              if (!user) { onSignIn(); return; }
+              onSelect(flight);
+            }}
+          />
+        ))}
+      </div>
+    : <div key={i} className={`ai-msg ${m.role}`}>
+        {m.text}
+      </div>
+)}
             {loading && (
               <div className="ai-typing">
                 <span /><span /><span />
@@ -2596,18 +3001,34 @@ function CompareDrawer({ flights, onClose }) {
  // AFTER — uses its own dedicated endpoint:
 const runCompare = async () => {
   const [a, b] = flights;
+
   try {
     const res = await fetch(`${API_BASE}/ai/compare`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ flight_a: a, flight_b: b }),
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+        flights: [a, b]
+      }),
     });
-    if (!res.ok) throw new Error("Compare failed");
+
+    if (!res.ok) {
+      throw new Error("Compare failed");
+    }
+
     const data = await res.json();
+
+    console.log("COMPARE RESPONSE:", data);
+
     setResult(data);
-  } catch {
+
+  } catch (err) {
+    console.error(err);
     setResult({ error: true });
   }
+
   setLoading(false);
 };
   const rc = (r) => r === "good" ? "#1a6b3c" : r === "bad" ? "#c1440e" : "var(--ink)";
@@ -2753,8 +3174,8 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
     (async () => {
       try {
         setLoadingOut(true); setErrorOut("");
-        const data = await fetchFlights(searchParams.from, searchParams.to, searchParams.date, searchParams.pax, searchParams.cabin);
-        if (!cancelled) setOutboundFlights(data);
+       const data = await fetchFlights(searchParams.from, searchParams.to, searchParams.date, searchParams.pax, searchParams.cabin);
+       if (!cancelled) setOutboundFlights(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setErrorOut("No outbound flights found. Try different cities or dates.");
       } finally {
@@ -2770,8 +3191,8 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
     (async () => {
       try {
         setLoadingRet(true); setErrorRet("");
-        const data = await fetchFlights(searchParams.to, searchParams.from, searchParams.returnDate, searchParams.pax, searchParams.cabin);
-        if (!cancelled) setReturnFlights(data);
+       const data = await fetchFlights(searchParams.to, searchParams.from, searchParams.returnDate, searchParams.pax, searchParams.cabin);
+       if (!cancelled) setReturnFlights(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setErrorRet("No return flights found. Try a different return date.");
       } finally {
@@ -2781,15 +3202,16 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
     return () => { cancelled = true; };
   }, [activeTab, isRoundTrip, searchParams, returnFlights.length]);
 
-  const applyFiltersAndSort = (flights) => {
-    let shown = [...flights];
-    if (filter.nonstop) shown = shown.filter(f => f.stops === 0);
-    if (filter.refundable) shown = shown.filter(f => f.refundable);
-    if (sort === "price") shown.sort((a, b) => a.price - b.price);
-    else if (sort === "duration") shown.sort((a, b) => (a.duration || "").localeCompare(b.duration || ""));
-    else if (sort === "dep") shown.sort((a, b) => (a.dep || "").localeCompare(b.dep || ""));
-    return shown.map((f, i) => ({ ...f, best: i === 0 }));
-  };
+ const applyFiltersAndSort = (flights) => {
+  if (!Array.isArray(flights)) return [];
+  let shown = [...flights];
+  if (filter.nonstop) shown = shown.filter(f => f.stops === 0);
+  if (filter.refundable) shown = shown.filter(f => f.refundable);
+  if (sort === "price") shown.sort((a, b) => a.price - b.price);
+  else if (sort === "duration") shown.sort((a, b) => (a.duration || "").localeCompare(b.duration || ""));
+  else if (sort === "dep") shown.sort((a, b) => (a.dep || "").localeCompare(b.dep || ""));
+  return shown.map((f, i) => ({ ...f, best: i === 0 }));
+};
 
   const handleSelectOutbound = (flight) => {
     if (isRoundTrip) { setSelectedOutbound(flight); setActiveTab("return"); }
@@ -3037,7 +3459,7 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
         currency: order.currency,
         name: "SkyBook",
         description: `${flight.from} → ${flight.to} | ${flight.airline.name}`,
-        image: "https://via.placeholder.com/60x60/c1622f/ffffff?text=✈",
+        image: "",
         order_id: order.razorpay_order_id,
         prefill: { name:`${pax.firstName} ${pax.lastName}`, email:pax.email, contact:pax.phone },
         theme: { color: "#c1622f" },
@@ -3538,7 +3960,7 @@ export default function SkyBook() {
       )}
 
       <PricePredictorAgent/>
-      <AiChat/>
+      <AiChat user={user} onSignIn={() => setShowAuth(true)} onSelect={handleSelect}/>
     </>
   );
 }
