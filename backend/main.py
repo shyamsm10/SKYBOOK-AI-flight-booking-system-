@@ -386,17 +386,29 @@ def run_workflow(stage: str, user_text: str, messages: list,
 
     # ── FLIGHT_CHOSEN — kick off the collection flow ──────────
     if stage == "FLIGHT_CHOSEN":
-        if not is_signed_in:
-            return {
-                "reply":  "To book, you'll need to sign in first — it only takes a moment.",
-                "flights": [],
-                "action": "REQUIRE_LOGIN",
-            }
+      if not is_signed_in:
         return {
-            "reply":  "Sure! Let's get you booked. What's the **full name on your ID**? (first and last name)",
+            "reply": "To book, you'll need to sign in first — it only takes a moment.",
+            "flights": [],
+            "action": "REQUIRE_LOGIN",
+        }
+    # Check if flights were actually shown
+    recent_bot = [m.get("content","") for m in messages[-10:] if m.get("role")=="assistant"]
+    flights_were_shown = any(
+        "₹" in b and ("non-stop" in b.lower() or "stop" in b.lower())
+        for b in recent_bot
+    )
+    if not flights_were_shown:
+        return {
+            "reply": "Sure! First let me find flights for you — which route and date?",
             "flights": [],
             "action": None,
         }
+    return {
+        "reply": "Sure! Let's get you booked. What's the **full name on your ID**? (first and last name)",
+        "flights": [],
+        "action": None,
+    }
 
     # ── NEED_LOGIN — user came back after login prompt ────────
     if stage == "NEED_LOGIN":
