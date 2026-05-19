@@ -1429,7 +1429,7 @@ async function askPricePredictor(route, date, cabin, currentPrice) {
   }
 }
 
- 
+ // ── API HELPERS ───────────────────────────────────────────────────────────
 async function fetchFlights(fromCity, toCity, date, pax = 1, cabin = "economy") {
   try {
     const params = new URLSearchParams({
@@ -1439,40 +1439,48 @@ async function fetchFlights(fromCity, toCity, date, pax = 1, cabin = "economy") 
       pax:       String(pax),
       cabin,
     });
- 
+
     const res = await fetch(`${API_BASE}/flights/search?${params}`);
- 
-    // Backend returns 404 when no flights found — treat as empty, not a crash
+
     if (res.status === 404) return [];
- 
+
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || `Server error ${res.status}`);
     }
- 
+
     const data = await res.json();
- 
-    // Always return an array — never undefined/null
     return Array.isArray(data) ? data : [];
- 
+
   } catch (err) {
     console.error("fetchFlights error:", err);
-    // Re-throw so ResultsPage catch block shows the error message
     throw err;
   }
 }
-async function askAI(messages, onFlightsReceived) {
+
+// ── FIX 1: Added selectedOfferId parameter and sends it in request body ──
+async function askAI(messages, user, onFlightsReceived, onAction, selectedOfferId = null) {
   try {
     const res = await fetch(`${API_BASE}/ai/chat-with-flights`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({
+        messages,
+        user: user ? { email: user.email, name: user.name } : null,
+        selected_offer_id: selectedOfferId || "",  // ✅ FIX: send offer_id to backend
+      }),
     });
     if (!res.ok) throw new Error("AI error");
     const data = await res.json();
+
     if (data.flights?.length > 0 && onFlightsReceived) {
       onFlightsReceived(data.flights);
     }
+
+    if (data.action && onAction) {
+      onAction(data.action, data.passenger);
+    }
+
     return data.reply || "Sorry, I couldn't get a response.";
   } catch (e) {
     return "⚠️ AI service temporarily unavailable. Please try again shortly.";
@@ -1526,7 +1534,6 @@ async function confirmBooking(offerId, passenger, flight, paymentId) {
 function fmtTime(raw) {
   if (!raw || raw === "N/A") return "—";
   try {
-    // Handles both "2026-05-16 06:30" and "2026-05-16T06:30:00"
     const normalised = raw.replace(" ", "T");
     const d = new Date(normalised);
     if (!isNaN(d.getTime())) {
@@ -1534,17 +1541,29 @@ function fmtTime(raw) {
         hour: "2-digit", minute: "2-digit", hour12: true
       });
     }
-    // Last resort: grab HH:MM from wherever it is
     const match = raw.match(/\d{2}:\d{2}/);
     return match ? match[0] : raw;
   } catch {
     return raw;
   }
 }
- 
+
 function fmtDate(raw) {
   if (!raw) return "";
   return raw.slice(0, 10);
+}
+
+// ── FIX 2: Convert YYYY-MM-DD (from date input) to DD-MM-YYYY (backend expects) ──
+function convertDobForBackend(dob) {
+  if (!dob) return "";
+  // If already in DD-MM-YYYY format, return as-is
+  if (/^\d{2}-\d{2}-\d{4}$/.test(dob)) return dob;
+  // Convert from YYYY-MM-DD to DD-MM-YYYY
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+    const [year, month, day] = dob.split("-");
+    return `${day}-${month}-${year}`;
+  }
+  return dob;
 }
 
 function loadRazorpay() {
@@ -1586,7 +1605,6 @@ const PAYMENT_METHODS = [
   { id: "emi",      emoji: "📅", label: "EMI",         sub: "No-cost EMI available" },
 ];
 
-// ── PAYMENT SECTION (replaces old payment-section div) ────────────────────
 function PaymentSection({ paymentMethod, setPaymentMethod, user }) {
   useEffect(() => { injectPaymentStyles(); }, []);
   if (!user) return null;
@@ -1594,7 +1612,6 @@ function PaymentSection({ paymentMethod, setPaymentMethod, user }) {
   return (
     <div className="ps-root">
       <h3 className="ps-heading">Payment Method</h3>
-
       <div className="ps-security">
         <span className="ps-security-icon">🔒</span>
         <span className="ps-security-text">
@@ -1602,7 +1619,6 @@ function PaymentSection({ paymentMethod, setPaymentMethod, user }) {
           Your card details are never stored on our servers
         </span>
       </div>
-
       <div className="ps-method-grid">
         {PAYMENT_METHODS.map((m) => (
           <button
@@ -1617,7 +1633,6 @@ function PaymentSection({ paymentMethod, setPaymentMethod, user }) {
           </button>
         ))}
       </div>
-
       <div className="ps-rzp-brand">
         <div className="ps-rzp-logo">
           <div className="ps-rzp-logo-mark"><RazorpayLogoMark /></div>
@@ -1631,7 +1646,6 @@ function PaymentSection({ paymentMethod, setPaymentMethod, user }) {
   );
 }
 
-// ── BOOKING SUMMARY CARD (replaces old summary-card div) ──────────────────
 function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorpay, user, onSignIn }) {
   useEffect(() => { injectPaymentStyles(); }, []);
 
@@ -1649,8 +1663,6 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
   return (
     <div className="bsc-root">
       <div className="bsc-card">
-
-        {/* Dark airline header band */}
         <div className="bsc-airline-band">
           <div className="bsc-airline-icon">✈️</div>
           <div>
@@ -1660,8 +1672,6 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
             </div>
           </div>
         </div>
-
-        {/* Route cities — boarding-pass style */}
         <div className="bsc-route">
           <div className="bsc-route-cities">
             <div className="bsc-city-block">
@@ -1687,8 +1697,6 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
             </div>
           </div>
         </div>
-
-        {/* Detail rows */}
         <div className="bsc-details">
           {detailRows.map(([k, v]) => (
             <div key={k} className="bsc-detail-row">
@@ -1697,8 +1705,6 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
             </div>
           ))}
         </div>
-
-        {/* Fare breakdown */}
         <div className="bsc-fare">
           <div className="bsc-fare-row">
             <span className="bsc-fare-key">Base fare</span>
@@ -1718,8 +1724,6 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
             <span className="bsc-total-val">₹ {total?.toLocaleString()}</span>
           </div>
         </div>
-
-        {/* CTA footer */}
         <div className="bsc-footer">
           <button
             className="ps-pay-btn"
@@ -1737,7 +1741,6 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
               )}
             </div>
           </button>
-
           {!user && (
             <div className="bsc-guest-note">
               A Google account is required to complete booking.{" "}
@@ -1753,13 +1756,11 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
               </button>
             </div>
           )}
-
           {user && (
             <div className="bsc-secure-note">
               <span>🔒</span> Secured by Razorpay · {user.email}
             </div>
           )}
-
           <div className="ps-trust-row">
             {[
               { icon: "🛡️", text: "PCI DSS\nCertified" },
@@ -1773,13 +1774,11 @@ function BookingSummaryCard({ flight, taxes, total, loading, handlePayWithRazorp
             ))}
           </div>
         </div>
-
       </div>
     </div>
   );
 }
 
-// ── ANIMATED FLIGHT PATH ─────────────────────────────────────────────────
 function FlightAnimation() {
   return (
     <div className="flight-track">
@@ -1808,7 +1807,6 @@ function FlightAnimation() {
   );
 }
 
-// ── COMPONENTS ────────────────────────────────────────────────────────────
 function GoogleIcon() {
   return (
     <svg className="google-icon" viewBox="0 0 24 24">
@@ -1848,7 +1846,7 @@ function Nav({ user, onSignIn, onSignOut, onHome }) {
     </nav>
   );
 }
-  //Airport function
+
 function AirportField({ label, value, onChange, placeholder, excludeCode }) {
   const [query, setQuery]     = useState("");
   const [open, setOpen]       = useState(false);
@@ -1918,7 +1916,6 @@ function AirportField({ label, value, onChange, placeholder, excludeCode }) {
     setOpen(false);
   };
 
-  // Get or create portal root
   const getPortalRoot = () => {
     let el = document.getElementById("airport-portal");
     if (!el) {
@@ -1945,7 +1942,6 @@ function AirportField({ label, value, onChange, placeholder, excludeCode }) {
           overflow:     "hidden",
           pointerEvents:"all",
         }}>
-          {/* Header */}
           <div style={{
             padding: "10px 16px 8px",
             fontSize: "0.65rem", fontWeight: 700,
@@ -1955,7 +1951,6 @@ function AirportField({ label, value, onChange, placeholder, excludeCode }) {
           }}>
             Popular airports
           </div>
-
           {filtered.map((airport) => (
             <div
               key={airport.code}
@@ -2020,7 +2015,7 @@ function AirportField({ label, value, onChange, placeholder, excludeCode }) {
     </div>
   );
 }
-// Search form
+
 function SearchForm({ onSearch, compact = false }) {
   const today    = new Date().toISOString().split("T")[0];
   const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
@@ -2058,10 +2053,7 @@ function SearchForm({ onSearch, compact = false }) {
             </button>
           ))}
         </div>
-
         <div className={`search-grid ${isRoundTrip ? "" : "one-way"}`}>
-
-          {/* FROM */}
           <AirportField
             label="From"
             value={form.from}
@@ -2069,34 +2061,31 @@ function SearchForm({ onSearch, compact = false }) {
             placeholder="City or code…"
             excludeCode={form.to}
           />
-
-          {/* SWAP */}
-<div style={{ display:"flex", alignItems:"flex-end", paddingBottom: 5, justifyContent:"center" }}>
-  <button
-    type="button"
-    onClick={handleSwap}
-    title="Swap airports"
-    style={{
-      width: 38, height: 38, borderRadius: "50%",
-      background: "#f5ede4", border: "1.5px solid #e0c8b0",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      cursor: "pointer", color: "#c1622f", fontSize: "1.1rem",
-      transition: "all 0.18s", flexShrink: 0,
-      boxShadow: "0 2px 8px rgba(193,98,47,0.15)",
-    }}
-    onMouseEnter={e => {
-      e.currentTarget.style.background = "#c1622f";
-      e.currentTarget.style.color = "#fff";
-      e.currentTarget.style.transform = "rotate(180deg)";
-    }}
-    onMouseLeave={e => {
-      e.currentTarget.style.background = "#f5ede4";
-      e.currentTarget.style.color = "#c1622f";
-      e.currentTarget.style.transform = "rotate(0deg)";
-    }}
-  >⇄</button>
-</div>
-          {/* TO */}
+          <div style={{ display:"flex", alignItems:"flex-end", paddingBottom: 5, justifyContent:"center" }}>
+            <button
+              type="button"
+              onClick={handleSwap}
+              title="Swap airports"
+              style={{
+                width: 38, height: 38, borderRadius: "50%",
+                background: "#f5ede4", border: "1.5px solid #e0c8b0",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer", color: "#c1622f", fontSize: "1.1rem",
+                transition: "all 0.18s", flexShrink: 0,
+                boxShadow: "0 2px 8px rgba(193,98,47,0.15)",
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = "#c1622f";
+                e.currentTarget.style.color = "#fff";
+                e.currentTarget.style.transform = "rotate(180deg)";
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = "#f5ede4";
+                e.currentTarget.style.color = "#c1622f";
+                e.currentTarget.style.transform = "rotate(0deg)";
+              }}
+            >⇄</button>
+          </div>
           <AirportField
             label="To"
             value={form.to}
@@ -2104,15 +2093,11 @@ function SearchForm({ onSearch, compact = false }) {
             placeholder="City or code…"
             excludeCode={form.from}
           />
-
-          {/* DEPART */}
           <div className="search-field">
             <label className="search-label">Depart</label>
             <input type="date" className="search-input" min={today}
               value={form.date} onChange={e => set("date", e.target.value)} />
           </div>
-
-          {/* RETURN — only for round trip */}
           {isRoundTrip && (
             <div className="search-field">
               <label className="search-label">Return</label>
@@ -2120,15 +2105,11 @@ function SearchForm({ onSearch, compact = false }) {
                 value={form.returnDate} onChange={e => set("returnDate", e.target.value)} />
             </div>
           )}
-
-          {/* PAX */}
           <div className="search-field">
             <label className="search-label">Pax</label>
             <input type="number" className="search-input" min={1} max={9}
               value={form.pax} onChange={e => set("pax", parseInt(e.target.value) || 1)} />
           </div>
-
-          {/* CABIN */}
           <div className="search-field">
             <label className="search-label">Cabin</label>
             <select className="search-input" value={form.cabin}
@@ -2139,33 +2120,24 @@ function SearchForm({ onSearch, compact = false }) {
               <option value="first">First Class</option>
             </select>
           </div>
-
           <button className="search-btn" onClick={submit}>Search ✈️</button>
         </div>
       </div>
     </div>
   );
 }
+
 function FlightCard({ flight, onSelect, onToggleCompare, isCompareChecked }) {
-  // Guard: if flight object is bad, render nothing instead of crashing
   if (!flight || typeof flight !== "object") return null;
- 
-  // Safe price — backend rounds it, never needs /100
   const price = Number(flight.price ?? 0);
- 
-  // Safe airline fields
   const airlineName = flight?.airline?.name ?? "Unknown Airline";
   const airlineCode = flight?.airline?.code ?? "";
- 
   const isBest = Boolean(flight.best);
- 
+
   return (
     <div className={`flight-card ${isBest ? "best" : ""} ${isCompareChecked ? "compare-checked" : ""}`}>
       {isBest && <div className="best-tag">✦ Best Value</div>}
- 
       <div className="fc-main">
- 
-        {/* Airline */}
         <div className="airline-info">
           <div className="airline-logo">✈️</div>
           <div>
@@ -2175,8 +2147,6 @@ function FlightCard({ flight, onSelect, onToggleCompare, isCompareChecked }) {
             </div>
           </div>
         </div>
- 
-        {/* Route */}
         <div className="route-viz">
           <div className="route-end">
             <div className="route-iata">{flight.from ?? "—"}</div>
@@ -2196,8 +2166,6 @@ function FlightCard({ flight, onSelect, onToggleCompare, isCompareChecked }) {
             <div className="route-time">{fmtTime(flight.arr)}</div>
           </div>
         </div>
- 
-        {/* Price */}
         <div className="price-block">
           <div className="price-val">₹ {price.toLocaleString("en-IN")}</div>
           <div className="price-pp">per person</div>
@@ -2206,15 +2174,12 @@ function FlightCard({ flight, onSelect, onToggleCompare, isCompareChecked }) {
           </button>
         </div>
       </div>
- 
-      {/* Tags */}
       <div className="fc-tags">
         {(flight.stops ?? 0) === 0 && <span className="tag tag-green">Non-stop</span>}
         {flight.meal       && <span className="tag tag-warm">Meal included</span>}
         {flight.refundable && <span className="tag tag-green">Refundable</span>}
         <span className="tag tag-grey">🧳 {flight.baggage ?? "—"}</span>
         <span className="tag tag-grey">{flight.class ?? "Economy"}</span>
- 
         <button
           onClick={(e) => { e.stopPropagation(); onToggleCompare?.(flight); }}
           style={{
@@ -2257,7 +2222,6 @@ function SkeletonCard() {
   );
 }
 
-// ── GOOGLE SIGN-IN MODAL ─────────────────────────────────────────────────
 function SignInModal({ onClose, onSignIn }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -2320,7 +2284,6 @@ function SignInModal({ onClose, onSignIn }) {
   );
 }
 
-// ── PRICE PREDICTOR AGENT ─────────────────────────────────────────────────
 function PricePredictorAgent() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ from:"", to:"", date:"", cabin:"economy", price:"" });
@@ -2430,7 +2393,6 @@ function PricePredictorAgent() {
     </div>
   );
 }
-// ── Supabase client helpers ───────────────────────────────────────────────
 
 function getBrowserId() {
   let id = localStorage.getItem("skybook_browser_id");
@@ -2497,7 +2459,7 @@ async function dbAddMessage(sessionId, role, content) {
   if (error) throw new Error(error.message);
   return data[0];
 }
-//chat flight card
+
 function ChatFlightCard({ flight, onBook }) {
   const price = Number(flight.price ?? 0);
   const stops = flight.stops ?? 0;
@@ -2539,7 +2501,7 @@ function ChatFlightCard({ flight, onBook }) {
         </div>
       </div>
       <button
-        onClick={() => onBook(flight)}
+       onClick={() => onBook(flight)}
         style={{
           width: "100%", background: "linear-gradient(135deg, #d4783a, #b45309)",
           color: "#fff", border: "none", borderRadius: 8,
@@ -2563,11 +2525,14 @@ function AiChat({ user, onSignIn, onSelect }) {
   const [currentSessionId, setCurrentSessionId] = useState(null);
   const [dbReady, setDbReady]             = useState(false);
   const [dbError, setDbError]             = useState("");
+  // ✅ FIX 3: Track selected offer_id in state
+  const [selectedOfferId, setSelectedOfferId] = useState(null);
   const endRef   = useRef(null);
   const inputRef = useRef(null);
 
   const WELCOME_TEXT =
-    "Happy to help — which route are you looking at?\n\nTry: *\"Flights from Delhi to Dubai tomorrow\"*";
+    "Hii Im SKYBOOK AI Agent,Happy to help — which route are you looking at?\n\nTry: *\"Flights from Delhi to Dubai tomorrow\"*";
+
   useEffect(() => {
     (async () => {
       const browserId = getBrowserId();
@@ -2602,6 +2567,8 @@ function AiChat({ user, onSignIn, onSelect }) {
     setCurrentSessionId(sid);
     setMsgs([{ role: "bot", text: WELCOME_TEXT }]);
     setShowHistory(false);
+    // ✅ FIX: Reset offer_id on new session
+    setSelectedOfferId(null);
     try {
       const updated = await dbGetSessions(bid);
       setSessions(updated);
@@ -2615,6 +2582,8 @@ function AiChat({ user, onSignIn, onSelect }) {
       setCurrentSessionId(sid);
       setMsgs(messages.length ? messages : [{ role: "bot", text: WELCOME_TEXT }]);
       localStorage.setItem("skybook_last_session", sid);
+      // ✅ FIX: Reset offer_id when loading a different session
+      setSelectedOfferId(null);
       if (closeHistory) setShowHistory(false);
     } catch {
       setDbError("Failed to load session.");
@@ -2642,48 +2611,102 @@ function AiChat({ user, onSignIn, onSelect }) {
   }, [open]);
 
   const send = useCallback(
-  async (text) => {
-    const txt = (text || inp).trim();
-    if (!txt || loading || !msgs) return;
-    setInp("");
-    setLoading(true);
-    const userMsg = { role: "user", text: txt };
-    const newMsgs = [...msgs, userMsg];
-    setMsgs(newMsgs);
-    if (dbReady && currentSessionId !== "local") {
-      try {
-        await dbAddMessage(currentSessionId, "user", txt);
-        const firstUser = newMsgs.find((m) => m.role === "user");
-        if (firstUser) {
-          const title = firstUser.text.slice(0, 60) + (firstUser.text.length > 60 ? "…" : "");
-          await dbUpdateSession(currentSessionId, { title });
-          setSessions((prev) =>
-            prev.map((s) => (s.id === currentSessionId ? { ...s, title } : s))
-          );
+    async (text) => {
+      const txt = (text || inp).trim();
+      if (!txt || loading || !msgs) return;
+      setInp("");
+      setLoading(true);
+      const userMsg = { role: "user", text: txt };
+      const newMsgs = [...msgs, userMsg];
+      setMsgs(newMsgs);
+
+      if (dbReady && currentSessionId !== "local") {
+        try {
+          await dbAddMessage(currentSessionId, "user", txt);
+          const firstUser = newMsgs.find((m) => m.role === "user");
+          if (firstUser) {
+            const title = firstUser.text.slice(0, 60) + (firstUser.text.length > 60 ? "…" : "");
+            await dbUpdateSession(currentSessionId, { title });
+            setSessions((prev) =>
+              prev.map((s) => (s.id === currentSessionId ? { ...s, title } : s))
+            );
+          }
+        } catch {}
+      }
+
+      const history = newMsgs
+        .filter((_, i) => i > 0)
+        .filter((m) => m.role !== "flights")
+        .map((m) => ({ role: m.role === "bot" ? "assistant" : "user", content: m.text ?? "" }));
+
+      let lastFlightsFromThisSend = null;
+
+      const reply = await askAI(
+        history,
+        user,
+        (flights) => {
+          lastFlightsFromThisSend = flights;
+          // ✅ FIX 4: Auto-store offer_id from the first flight returned by AI
+          if (flights?.[0]?.offer_id) {
+            setSelectedOfferId(flights[0].offer_id);
+          }
+          setMsgs(prev => [...prev, { role: "flights", flights }]);
+        },
+      (action, passenger) => {
+  if (action === "REQUIRE_LOGIN") {
+    onSignIn();
+  } else if (action === "PROCEED_TO_BOOKING") {
+    // Try the flights returned in this very turn first,
+    // then fall back to the most recent flights shown in chat history.
+    const flightsToUse = lastFlightsFromThisSend;
+    if (flightsToUse && flightsToUse.length > 0) {
+      const flight = {
+        ...flightsToUse[0],
+        offer_id: passenger?.offer_id || flightsToUse[0].offer_id,
+      };
+      onSelect(flight, passenger);
+    } else {
+      // Use functional update to read latest msgs without stale closure
+      setMsgs(prev => {
+        const lastFlightMsg = [...prev].reverse().find(m => m.role === "flights");
+        if (lastFlightMsg?.flights?.[0]) {
+          const flight = {
+            ...lastFlightMsg.flights[0],
+            // prefer the offer_id we stored when user first picked a flight
+            offer_id: selectedOfferId || passenger?.offer_id || lastFlightMsg.flights[0].offer_id,
+          };
+          onSelect(flight, passenger);
+        } else {
+          // No flight found at all — tell the user
+          setMsgs(p => [...p, {
+            role: "bot",
+            text: "Something went wrong finding your selected flight. Could you search again?",
+          }]);
         }
-      } catch {}
+        return prev;
+      });
     }
-    const history = newMsgs
-      .filter((_, i) => i > 0)
-      .filter((m) => m.role !== "flights")
-      .map((m) => ({ role: m.role === "bot" ? "assistant" : "user", content: m.text ?? "" }));
-    const reply = await askAI(history, (flights) => {
-      setMsgs(prev => [...prev, { role: "flights", flights }]);
-    });
-    const botMsg = { role: "bot", text: reply };
-    setMsgs((prev) => [...prev, botMsg]);
-    if (dbReady && currentSessionId !== "local") {
-      try {
-        await dbAddMessage(currentSessionId, "bot", reply);
-        await dbUpdateSession(currentSessionId, {});
-        const updated = await dbGetSessions(getBrowserId());
-        setSessions(updated);
-      } catch {}
-    }
-    setLoading(false);
-  },
-  [inp, msgs, loading, currentSessionId, dbReady]
-);
+  }
+},  
+        selectedOfferId  // ✅ FIX 6: Pass selectedOfferId to askAI
+      );
+
+      const botMsg = { role: "bot", text: reply };
+      setMsgs((prev) => [...prev, botMsg]);
+
+      if (dbReady && currentSessionId !== "local") {
+        try {
+          await dbAddMessage(currentSessionId, "bot", reply);
+          await dbUpdateSession(currentSessionId, {});
+          const updated = await dbGetSessions(getBrowserId());
+          setSessions(updated);
+        } catch {}
+      }
+      setLoading(false);
+    },
+    // ✅ FIX 7: Added selectedOfferId to dependency array
+    [inp, msgs, loading, currentSessionId, dbReady, user, onSignIn, onSelect, selectedOfferId]
+  );
 
   const formatDate = (ts) =>
     new Date(ts).toLocaleDateString("en-IN", {
@@ -2695,8 +2718,6 @@ function AiChat({ user, onSignIn, onSelect }) {
 
   return (
     <div className="ai-fab">
-
-      {/* ── HISTORY PANEL — floats separately, does not push chat ── */}
       {open && showHistory && (
         <div style={{
           position: "absolute", bottom: 72, right: 0,
@@ -2707,7 +2728,6 @@ function AiChat({ user, onSignIn, onSelect }) {
           animation: "slideUp 0.25s cubic-bezier(.4,0,.2,1)",
           maxHeight: 420, display: "flex", flexDirection: "column",
         }}>
-          {/* History header */}
           <div style={{
             padding: "13px 15px", background: "#1a1410",
             display: "flex", alignItems: "center", justifyContent: "space-between",
@@ -2727,8 +2747,6 @@ function AiChat({ user, onSignIn, onSelect }) {
               }}
             >✕</button>
           </div>
-
-          {/* Session list */}
           <div style={{ overflowY: "auto", flex: 1 }}>
             {sessions.length === 0 ? (
               <div style={{ padding: "14px 16px", fontSize: "0.8rem", color: "var(--muted)" }}>
@@ -2778,8 +2796,6 @@ function AiChat({ user, onSignIn, onSelect }) {
               ))
             )}
           </div>
-
-          {/* New conversation button */}
           <div style={{ padding: "10px 14px", borderTop: "0.5px solid var(--sand)", flexShrink: 0 }}>
             <button
               onClick={() => { createNewSession(); setShowHistory(false); }}
@@ -2794,21 +2810,16 @@ function AiChat({ user, onSignIn, onSelect }) {
         </div>
       )}
 
-      {/* ── CHAT BOX ── */}
       {open && (
         <div className="ai-chat-box">
-
-          {/* Header */}
           <div className="ai-chat-header">
             <div className="ai-dot" />
             <div style={{ flex: 1 }}>
               <div className="ai-header-name">SkyBook AI Agent</div>
               <div className="ai-header-sub">
-                {dbReady ? "Powered by Groq · History saved" : "Powered by Groq · Live Duffel data"}
+                {dbReady ? " · History saved" : " Live Duffel data"}
               </div>
             </div>
-
-            {/* History toggle */}
             <button
               onClick={() => setShowHistory((p) => !p)}
               title="Chat history"
@@ -2819,8 +2830,6 @@ function AiChat({ user, onSignIn, onSelect }) {
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}
             >🕐</button>
-
-            {/* New chat */}
             <button
               onClick={() => createNewSession()}
               title="New chat"
@@ -2831,11 +2840,9 @@ function AiChat({ user, onSignIn, onSelect }) {
                 display: "flex", alignItems: "center", justifyContent: "center",
               }}
             >✏️</button>
-
             <button className="ai-close-btn" onClick={() => setOpen(false)}>✕</button>
           </div>
 
-          {/* DB error banner */}
           {dbError && (
             <div style={{
               background: "#fff3cd", borderBottom: "1px solid #ffc107",
@@ -2845,26 +2852,29 @@ function AiChat({ user, onSignIn, onSelect }) {
             </div>
           )}
 
-          {/* Messages */}
           <div className="ai-messages">
-           {msgs.map((m, i) =>
-  m.role === "flights"
-    ? <div key={i}>
-        {m.flights.map((f, j) => (
-          <ChatFlightCard
-            key={j}
-            flight={f}
-            onBook={(flight) => {
-              if (!user) { onSignIn(); return; }
-              onSelect(flight);
-            }}
-          />
-        ))}
-      </div>
-    : <div key={i} className={`ai-msg ${m.role}`}>
-        {m.text}
-      </div>
-)}
+            {msgs.map((m, i) =>
+              m.role === "flights"
+                ? <div key={i}>
+                    {m.flights.map((f, j) => (
+                      <ChatFlightCard
+                        key={j}
+                        flight={f}
+                        onBook={(flight) => {
+                          if (!user) { onSignIn(); return; }
+            
+                          // ✅ FIX 8: Store offer_id when user clicks Book This Flight
+                          setSelectedOfferId(flight.offer_id);
+                          // send a chat messsgae to backendflow to handle properly
+                          send('Book the ${flight.airline?.name}flight');
+                        }}
+                      />
+                    ))}
+                  </div>
+                : <div key={i} className={`ai-msg ${m.role}`}>
+                    {m.text}
+                  </div>
+            )}
             {loading && (
               <div className="ai-typing">
                 <span /><span /><span />
@@ -2873,7 +2883,6 @@ function AiChat({ user, onSignIn, onSelect }) {
             <div ref={endRef} />
           </div>
 
-          {/* Quick replies */}
           {msgs.length <= 1 && (
             <div className="ai-quick-replies">
               {QUICK_REPLIES.map((q) => (
@@ -2884,7 +2893,6 @@ function AiChat({ user, onSignIn, onSelect }) {
             </div>
           )}
 
-          {/* Input */}
           <div className="ai-input-row">
             <input
               ref={inputRef}
@@ -2906,7 +2914,6 @@ function AiChat({ user, onSignIn, onSelect }) {
               </svg>
             </button>
           </div>
-
         </div>
       )}
 
@@ -2921,7 +2928,6 @@ function AiChat({ user, onSignIn, onSelect }) {
   );
 }
 
-// ── PAGES ─────────────────────────────────────────────────────────────────
 function LandingPage({ onSearch, onSignIn }) {
   const particles = Array.from({length:12}, () => ({
     size: Math.random()*80+20,
@@ -2962,7 +2968,6 @@ function LandingPage({ onSearch, onSignIn }) {
         <div id="search-anchor"/>
         <SearchForm onSearch={onSearch}/>
       </div>
-
       <div className="features">
         <div className="features-inner">
           <div className="section-eyebrow">Why SkyBook</div>
@@ -2986,8 +2991,6 @@ function LandingPage({ onSearch, onSignIn }) {
   );
 }
 
-// ── RESULTS PAGE ──────────────────────────────────────────────────────────
-// ── COMPARE DRAWER ────────────────────────────────────────────────────────
 function CompareDrawer({ flights, onClose }) {
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2998,39 +3001,24 @@ function CompareDrawer({ flights, onClose }) {
     runCompare();
   }, []);
 
- // AFTER — uses its own dedicated endpoint:
-const runCompare = async () => {
-  const [a, b] = flights;
-
-  try {
-    const res = await fetch(`${API_BASE}/ai/compare`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-
-      body: JSON.stringify({
-        flights: [a, b]
-      }),
-    });
-
-    if (!res.ok) {
-      throw new Error("Compare failed");
+  const runCompare = async () => {
+    const [a, b] = flights;
+    try {
+      const res = await fetch(`${API_BASE}/ai/compare`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ flights: [a, b] }),
+      });
+      if (!res.ok) throw new Error("Compare failed");
+      const data = await res.json();
+      setResult(data);
+    } catch (err) {
+      console.error(err);
+      setResult({ error: true });
     }
+    setLoading(false);
+  };
 
-    const data = await res.json();
-
-    console.log("COMPARE RESPONSE:", data);
-
-    setResult(data);
-
-  } catch (err) {
-    console.error(err);
-    setResult({ error: true });
-  }
-
-  setLoading(false);
-};
   const rc = (r) => r === "good" ? "#1a6b3c" : r === "bad" ? "#c1440e" : "var(--ink)";
   const [a, b] = flights;
 
@@ -3049,8 +3037,6 @@ const runCompare = async () => {
 
   return (
     <div ref={drawerRef} style={{ border: "1.5px solid var(--sand)", borderRadius: 16, overflow: "hidden", marginTop: 12, background: "#fff" }}>
-
-      {/* Header */}
       <div style={{ background: "var(--brown)", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ color: "#fff", fontWeight: 700, fontSize: "0.95rem" }}>⚖️ Flight Comparison</div>
@@ -3058,7 +3044,6 @@ const runCompare = async () => {
         </div>
         <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: 18 }}>✕</button>
       </div>
-
       {loading ? (
         <div style={{ padding: 40, textAlign: "center" }}>
           <div style={{ width: 28, height: 28, border: "2.5px solid var(--cream2)", borderTopColor: "var(--terra)", borderRadius: "50%", animation: "spin 0.7s linear infinite", margin: "0 auto 12px" }} />
@@ -3070,8 +3055,6 @@ const runCompare = async () => {
         </div>
       ) : (
         <div style={{ padding: 20 }}>
-
-          {/* Score bars */}
           {result && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 40px 1fr", gap: 0, marginBottom: 20 }}>
               <div>
@@ -3093,8 +3076,6 @@ const runCompare = async () => {
               </div>
             </div>
           )}
-
-          {/* Column headers */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", border: "1.5px solid var(--sand)", borderRadius: "12px 12px 0 0", overflow: "hidden" }}>
             {[{ flight: a, data: result?.flightA, label: "A" }, { flight: b, data: result?.flightB, label: "B" }].map(({ flight, data, label }, i) => (
               <div key={label} style={{ background: "var(--brown)", padding: "10px 14px", borderLeft: i === 1 ? "1px solid rgba(255,255,255,0.1)" : "none" }}>
@@ -3106,8 +3087,6 @@ const runCompare = async () => {
               </div>
             ))}
           </div>
-
-          {/* Price row */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", border: "1.5px solid var(--sand)", borderTop: "none" }}>
             {[a, b].map((f, i) => (
               <div key={i} style={{ padding: "10px 14px", borderLeft: i === 1 ? "1px solid var(--sand)" : "none" }}>
@@ -3115,33 +3094,27 @@ const runCompare = async () => {
               </div>
             ))}
           </div>
-
-          {/* Metric rows */}
           {result && (
             <div style={{ border: "1.5px solid var(--sand)", borderTop: "none", borderRadius: "0 0 12px 12px", overflow: "hidden" }}>
-              <MetricRow label="Departure"  valA={fmtTime(a.dep)}                     ratingA={result.flightA?.duration_rating} valB={fmtTime(b.dep)}                     ratingB={result.flightB?.duration_rating} />
-              <MetricRow label="Duration"   valA={a.duration}                          ratingA={result.flightA?.duration_rating} valB={b.duration}                          ratingB={result.flightB?.duration_rating} />
-              <MetricRow label="Baggage"    valA={a.baggage}                           ratingA={result.flightA?.baggage_rating}  valB={b.baggage}                           ratingB={result.flightB?.baggage_rating} />
-              <MetricRow label="Meal"       valA={a.meal ? "Included ✓" : "Not included"} ratingA={result.flightA?.meal_rating} valB={b.meal ? "Included ✓" : "Not included"} ratingB={result.flightB?.meal_rating} />
-              <MetricRow label="Refundable" valA={a.refundable ? "Yes ✓" : "No"}      ratingA={a.refundable ? "good" : "bad"}   valB={b.refundable ? "Yes ✓" : "No"}      ratingB={b.refundable ? "good" : "bad"} />
+              <MetricRow label="Departure"  valA={fmtTime(a.dep)}                         ratingA={result.flightA?.duration_rating} valB={fmtTime(b.dep)}                         ratingB={result.flightB?.duration_rating} />
+              <MetricRow label="Duration"   valA={a.duration}                              ratingA={result.flightA?.duration_rating} valB={b.duration}                              ratingB={result.flightB?.duration_rating} />
+              <MetricRow label="Baggage"    valA={a.baggage}                               ratingA={result.flightA?.baggage_rating}  valB={b.baggage}                               ratingB={result.flightB?.baggage_rating} />
+              <MetricRow label="Meal"       valA={a.meal ? "Included ✓" : "Not included"} ratingA={result.flightA?.meal_rating}     valB={b.meal ? "Included ✓" : "Not included"} ratingB={result.flightB?.meal_rating} />
+              <MetricRow label="Refundable" valA={a.refundable ? "Yes ✓" : "No"}          ratingA={a.refundable ? "good" : "bad"}   valB={b.refundable ? "Yes ✓" : "No"}          ratingB={b.refundable ? "good" : "bad"} />
             </div>
           )}
-
-          {/* Verdict */}
           {result?.verdict && (
             <div style={{ background: "var(--cream2)", border: "1.5px solid var(--sand)", borderRadius: 10, padding: "14px 16px", marginTop: 14 }}>
               <div style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "var(--terra)", marginBottom: 6 }}>AI Verdict</div>
               <div style={{ fontSize: "0.83rem", color: "var(--brown)", lineHeight: 1.6 }}>{result.verdict}</div>
             </div>
           )}
-
         </div>
       )}
     </div>
   );
 }
 
-// ── RESULTS PAGE ──────────────────────────────────────────────────────────
 function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
   const isRoundTrip = searchParams.type === "round-trip";
   const [activeTab, setActiveTab] = useState("outbound");
@@ -3154,17 +3127,15 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
   const [selectedOutbound, setSelectedOutbound] = useState(null);
   const [sort, setSort] = useState("price");
   const [filter, setFilter] = useState({ nonstop: false, refundable: false });
-
-  // ── NEW: compare state ──
   const [compareList, setCompareList] = useState([]);
   const [showCompare, setShowCompare] = useState(false);
 
   const toggleCompare = (flight) => {
-    setShowCompare(false); // close drawer if open when list changes
+    setShowCompare(false);
     setCompareList(prev => {
       const exists = prev.find(f => f.id === flight.id);
       if (exists) return prev.filter(f => f.id !== flight.id);
-      if (prev.length >= 2) return prev; // max 2
+      if (prev.length >= 2) return prev;
       return [...prev, flight];
     });
   };
@@ -3174,8 +3145,8 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
     (async () => {
       try {
         setLoadingOut(true); setErrorOut("");
-       const data = await fetchFlights(searchParams.from, searchParams.to, searchParams.date, searchParams.pax, searchParams.cabin);
-       if (!cancelled) setOutboundFlights(Array.isArray(data) ? data : []);
+        const data = await fetchFlights(searchParams.from, searchParams.to, searchParams.date, searchParams.pax, searchParams.cabin);
+        if (!cancelled) setOutboundFlights(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setErrorOut("No outbound flights found. Try different cities or dates.");
       } finally {
@@ -3191,8 +3162,8 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
     (async () => {
       try {
         setLoadingRet(true); setErrorRet("");
-       const data = await fetchFlights(searchParams.to, searchParams.from, searchParams.returnDate, searchParams.pax, searchParams.cabin);
-       if (!cancelled) setReturnFlights(Array.isArray(data) ? data : []);
+        const data = await fetchFlights(searchParams.to, searchParams.from, searchParams.returnDate, searchParams.pax, searchParams.cabin);
+        if (!cancelled) setReturnFlights(Array.isArray(data) ? data : []);
       } catch {
         if (!cancelled) setErrorRet("No return flights found. Try a different return date.");
       } finally {
@@ -3202,16 +3173,16 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
     return () => { cancelled = true; };
   }, [activeTab, isRoundTrip, searchParams, returnFlights.length]);
 
- const applyFiltersAndSort = (flights) => {
-  if (!Array.isArray(flights)) return [];
-  let shown = [...flights];
-  if (filter.nonstop) shown = shown.filter(f => f.stops === 0);
-  if (filter.refundable) shown = shown.filter(f => f.refundable);
-  if (sort === "price") shown.sort((a, b) => a.price - b.price);
-  else if (sort === "duration") shown.sort((a, b) => (a.duration || "").localeCompare(b.duration || ""));
-  else if (sort === "dep") shown.sort((a, b) => (a.dep || "").localeCompare(b.dep || ""));
-  return shown.map((f, i) => ({ ...f, best: i === 0 }));
-};
+  const applyFiltersAndSort = (flights) => {
+    if (!Array.isArray(flights)) return [];
+    let shown = [...flights];
+    if (filter.nonstop) shown = shown.filter(f => f.stops === 0);
+    if (filter.refundable) shown = shown.filter(f => f.refundable);
+    if (sort === "price") shown.sort((a, b) => a.price - b.price);
+    else if (sort === "duration") shown.sort((a, b) => (a.duration || "").localeCompare(b.duration || ""));
+    else if (sort === "dep") shown.sort((a, b) => (a.dep || "").localeCompare(b.dep || ""));
+    return shown.map((f, i) => ({ ...f, best: i === 0 }));
+  };
 
   const handleSelectOutbound = (flight) => {
     if (isRoundTrip) { setSelectedOutbound(flight); setActiveTab("return"); }
@@ -3315,7 +3286,6 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
             </div>
           )}
 
-          {/* ── COMPARE BAR — shows when 2 flights selected ── */}
           {compareList.length === 2 && (
             <div style={{
               background: "var(--brown)", borderRadius: 12, padding: "12px 18px",
@@ -3345,12 +3315,8 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
             </div>
           )}
 
-          {/* ── COMPARE DRAWER ── */}
           {showCompare && compareList.length === 2 && (
-            <CompareDrawer
-              flights={compareList}
-              onClose={() => setShowCompare(false)}
-            />
+            <CompareDrawer flights={compareList} onClose={() => setShowCompare(false)} />
           )}
 
           {currentLoading ? (
@@ -3397,7 +3363,6 @@ function ResultsPage({ searchParams, onSelect, onBack, onSearch }) {
 }
 
 // ── BOOKING PAGE ──────────────────────────────────────────────────────────
-// ── BOOKING PAGE ──────────────────────────────────────────────────────────
 const colStyle = { gridColumn: "1/-1" };
 const emptyStyle = {};
 
@@ -3415,12 +3380,24 @@ function Field({ label, id, col, errors, children }) {
   );
 }
 
-function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
+function BookingPage({ flight, user, onBack, onBook, onSignIn, prefillPassenger }) {
+  // ✅ FIX 9: Convert prefill dob from DD-MM-YYYY to YYYY-MM-DD for the date input
+  const prefillDobForInput = (dob) => {
+    if (!dob) return "";
+    if (/^\d{2}-\d{2}-\d{4}$/.test(dob)) {
+      const [day, month, year] = dob.split("-");
+      return `${year}-${month}-${day}`;
+    }
+    return dob;
+  };
+
   const [pax, setPax] = useState({
-    firstName: user?.name?.split(" ")[0]||"",
-    lastName:  user?.name?.split(" ")[1]||"",
-    email:     user?.email||"",
-    phone:"", dob:"", title:"mr", gender:"m"
+    firstName: prefillPassenger?.firstName || user?.name?.split(" ")[0] || "",
+    lastName:  prefillPassenger?.lastName  || user?.name?.split(" ")[1] || "",
+    email:     user?.email || "",
+    phone:     prefillPassenger?.phone     || "",
+    dob:       prefillDobForInput(prefillPassenger?.dob) || "",
+    title: "mr", gender: "m"
   });
   const [paymentMethod, setPaymentMethod] = useState("razorpay");
   const [loading, setLoading] = useState(false);
@@ -3449,10 +3426,14 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
       const rzLoaded = await loadRazorpay();
       if (!rzLoaded) { alert("Razorpay failed to load."); setLoading(false); return; }
 
-      const order = await createRazorpayOrder(
-        total * 100, "INR", `skybook_${flight.offer_id}_${Date.now()}`
-      );
-
+      if (!flight.offer_id) {
+  alert("Flight offer has expired or is missing. Please go back and search again.");
+  setLoading(false);
+  return;
+}
+const order = await createRazorpayOrder(
+  total * 100, "INR", `skybook_${flight.offer_id}_${Date.now()}`
+);
       const options = {
         key: order.key_id,
         amount: order.amount,
@@ -3478,10 +3459,16 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
               return;
             }
 
+            // ✅ FIX 10: Convert DOB from YYYY-MM-DD (date input) to DD-MM-YYYY (backend expects)
+            const paxForBooking = {
+              ...pax,
+              dob: convertDobForBackend(pax.dob),
+            };
+
             let result;
             try {
               result = await confirmBooking(
-                flight.offer_id, pax, flight, rzResponse.razorpay_payment_id
+                flight.offer_id, paxForBooking, flight, rzResponse.razorpay_payment_id
               );
             } catch (bookingErr) {
               console.error("Duffel booking error:", bookingErr);
@@ -3495,7 +3482,7 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
               return;
             }
 
-            onBook(flight, pax, result.booking, rzResponse.razorpay_payment_id);
+            onBook(flight, paxForBooking, result.booking, rzResponse.razorpay_payment_id);
 
           } catch (err) {
             console.error("Handler error:", err);
@@ -3528,9 +3515,7 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
           </div>
         )}
         <div className="detail-grid">
-          {/* ── LEFT COLUMN ── */}
           <div>
-            {/* Flight Details card */}
             <div className="detail-card" style={{marginBottom:20}}>
               <div className="detail-title">Flight Details{flight.isRoundTrip ? " — Outbound" : ""}</div>
               <div className="detail-route">
@@ -3589,7 +3574,6 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
               </div>
             </div>
 
-            {/* Passenger Details card */}
             <div className="detail-card">
               <div className="detail-title">Passenger Details</div>
               {!user && (
@@ -3671,7 +3655,6 @@ function BookingPage({ flight, user, onBack, onBook, onSignIn }) {
             />
           </div>
 
-          {/* ── RIGHT COLUMN ── */}
           <div>
             <BookingSummaryCard
               flight={flight}
@@ -3871,34 +3854,23 @@ function ConfirmPage({ booking, onHome }) {
           style={{
             marginTop: 20,
             background: "linear-gradient(135deg, #5d2e1c, #c1622f)",
-            color: "#fff",
-            border: "none",
-            borderRadius: 12,
-            padding: "14px 32px",
-            fontSize: "1rem",
-            fontWeight: 700,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            fontFamily: "var(--body)",
-            boxShadow: "0 4px 16px rgba(193,98,47,0.35)",
+            color: "#fff", border: "none", borderRadius: 12,
+            padding: "14px 32px", fontSize: "1rem", fontWeight: 700,
+            cursor: "pointer", display: "flex", alignItems: "center", gap: 10,
+            fontFamily: "var(--body)", boxShadow: "0 4px 16px rgba(193,98,47,0.35)",
           }}
         >
           📄 Download Booking PDF
         </button>
 
-        <button
-          className="btn-hero btn-hero-primary"
-          onClick={onHome}
-          style={{ marginTop: 12 }}
-        >
+        <button className="btn-hero btn-hero-primary" onClick={onHome} style={{ marginTop: 12 }}>
           ✈️ Book Another Flight
         </button>
       </div>
     </div>
   );
 }
+
 // ── ROOT APP ──────────────────────────────────────────────────────────────
 export default function SkyBook() {
   const [page, setPage] = useState("home");
@@ -3907,6 +3879,7 @@ export default function SkyBook() {
   const [searchParams, setSearchParams] = useState(null);
   const [selectedFlight, setSelectedFlight] = useState(null);
   const [booking, setBooking] = useState(null);
+  const [prefillPassenger, setPrefillPassenger] = useState(null);
 
   useEffect(() => {
     try {
@@ -3927,11 +3900,20 @@ export default function SkyBook() {
   };
 
   const handleSearch = (params) => { setSearchParams(params); setPage("results"); window.scrollTo(0,0); };
-  const handleSelect = (flight) => { setSelectedFlight(flight); setPage("booking"); window.scrollTo(0,0); };
-  const handleBook   = (flight, pax, bookingData, paymentId) => {
-    setBooking({ flight, pax, bookingData, paymentId });
-    setPage("confirm"); window.scrollTo(0,0);
+
+  const handleSelect = (flight, prefillPax = null) => {
+    setSelectedFlight(flight);
+    setPrefillPassenger(prefillPax);
+    setPage("booking");
+    window.scrollTo(0, 0);
   };
+
+  const handleBook = (flight, pax, bookingData, paymentId) => {
+    setBooking({ flight, pax, bookingData, paymentId });
+    setPage("confirm");
+    window.scrollTo(0,0);
+  };
+
   const goHome = () => { setPage("home"); window.scrollTo(0,0); };
 
   return (
@@ -3945,7 +3927,9 @@ export default function SkyBook() {
       )}
       {page==="booking" && selectedFlight && (
         <BookingPage
-          flight={selectedFlight} user={user}
+          flight={selectedFlight}
+          user={user}
+          prefillPassenger={prefillPassenger}
           onBack={() => setPage("results")}
           onBook={handleBook}
           onSignIn={() => setShowAuth(true)}
