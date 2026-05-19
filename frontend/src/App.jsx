@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom";
 import { createClient } from "@supabase/supabase-js";
 const API_BASE = "https://skybook-ai-flight-booking-system.onrender.com";
+//const API_BASE = "http://localhost:8000";
 const GOOGLE_CLIENT_ID = "164546349235-i7eg4h4lrako81vmiooejdigjka6c1lu.apps.googleusercontent.com";
 const SUPABASE_URL = "https://uhjuesjqzrfagmbpfczb.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JY60rZfPfsGCnSr3pUsB5w_5ZpM499H";
@@ -2866,7 +2867,7 @@ function AiChat({ user, onSignIn, onSelect }) {
                           // ✅ FIX 8: Store offer_id when user clicks Book This Flight
                           setSelectedOfferId(flight.offer_id);
                           // send a chat messsgae to backendflow to handle properly
-                          send('Book the ${flight.airline?.name}flight');
+                          send(`Book the ${flight.airline?.name} flight`);
                         }}
                       />
                     ))}
@@ -3874,19 +3875,17 @@ function ConfirmPage({ booking, onHome }) {
 // ── ROOT APP ──────────────────────────────────────────────────────────────
 export default function SkyBook() {
   const [page, setPage] = useState("home");
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("skybook_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch { return null; }
+  });
   const [showAuth, setShowAuth] = useState(false);
   const [searchParams, setSearchParams] = useState(null);
   const [selectedFlight, setSelectedFlight] = useState(null);
   const [booking, setBooking] = useState(null);
   const [prefillPassenger, setPrefillPassenger] = useState(null);
-
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem("skybook_user");
-      if (saved) setUser(JSON.parse(saved));
-    } catch {}
-  }, []);
 
   const handleSignIn = (userData) => {
     setUser(userData);

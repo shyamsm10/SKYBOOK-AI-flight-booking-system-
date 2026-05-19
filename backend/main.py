@@ -255,7 +255,9 @@ def detect_stage(messages: list, is_signed_in: bool) -> str:
 
     # NEED_LOGIN — bot told user to sign in
     if "sign in" in last_bot and ("book" in last_bot or "moment" in last_bot):
-        return "NEED_LOGIN"
+         if is_signed_in:
+             return "FLIGHT_CHOSEN"
+         return "NEED_LOGIN"
 
     # FLIGHT_CHOSEN — flights shown and user now wants to book
     flights_shown = any(
