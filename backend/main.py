@@ -219,26 +219,24 @@ def detect_stage(messages: list, is_signed_in: bool) -> str:
         "forget it", "flight", "search", "from", "to",
     ]
 
-    # ── Most specific stages first ───────────────────────────
-
-    # CONFIRM_PAYMENT — bot showed price and asked for payment consent
+    # CONFIRM_PAYMENT
     if ("total price" in last_bot or "₹" in last_bot) and \
        ("proceed to payment" in last_bot or "confirm and pay" in last_bot or "pay ₹" in last_bot):
         return "CONFIRM_PAYMENT"
 
-    # CONFIRM_DETAILS — bot showed name/dob/phone summary and asked to confirm
+    # CONFIRM_DETAILS
     if ("shall i go ahead" in last_bot or "lock this in" in last_bot) \
        and "phone:" in last_bot and "date of birth:" in last_bot:
         return "CONFIRM_DETAILS"
 
-    # NEED_PHONE — bot just asked for phone
+    # NEED_PHONE
     if "phone" in last_bot and ("reach you" in last_bot or "number" in last_bot):
         has_exit = any(w in last_user for w in EXIT_WORDS)
         if has_exit:
             return "IDLE"
         return "NEED_PHONE"
 
-    # NEED_DOB — bot just asked for DOB
+    # NEED_DOB
     if "date of birth" in last_bot or "dd-mm-yyyy" in last_bot:
         has_date = bool(re.search(r'\d{1,2}[-/]\d{1,2}[-/]\d{4}', last_user))
         has_exit = any(w in last_user for w in EXIT_WORDS)
@@ -246,27 +244,26 @@ def detect_stage(messages: list, is_signed_in: bool) -> str:
             return "IDLE"
         return "NEED_DOB"
 
-    # NEED_NAME — bot just asked for name
+    # NEED_NAME
     if "full name" in last_bot or "name on your id" in last_bot or "first and last" in last_bot:
         has_exit = any(w in last_user for w in EXIT_WORDS)
         if has_exit:
             return "IDLE"
         return "NEED_NAME"
 
-   # AFTER (fixed)
+    # NEED_LOGIN — fixed
     if "sign in" in last_bot and ("book" in last_bot or "moment" in last_bot):
         if is_signed_in:
-        # User is now signed in — skip past the login prompt
-        # and check if they were mid-booking
-           user_wants_to_book = any(w in last_user for w in [
-            "book", "yes", "confirm", "go ahead", "take it", "proceed",
-            "yep", "yeah", "sure", "ok", "airways", "airlines",
-        ])
-           if user_wants_to_book:
-            return "FLIGHT_CHOSEN"
-        return "IDLE"
-    return "NEED_LOGIN"
-    # FLIGHT_CHOSEN — flights shown and user now wants to book
+            user_wants_to_book = any(w in last_user for w in [
+                "book", "yes", "confirm", "go ahead", "take it", "proceed",
+                "yep", "yeah", "sure", "ok", "airways", "airlines",
+            ])
+            if user_wants_to_book:
+                return "FLIGHT_CHOSEN"
+            return "IDLE"
+        return "NEED_LOGIN"
+
+    # FLIGHT_CHOSEN
     flights_shown = any(
         "what's available" in b.lower() or
         "strongest pick" in b.lower() or
@@ -292,159 +289,75 @@ def detect_stage(messages: list, is_signed_in: bool) -> str:
 
     return "IDLE"
 
-def extract_name_from_text(text: str):
-    m = re.search(
-        r"(?:my name is|i'm|i am|name[:\s]+)\s*([A-Z][a-z]+)\s+([A-Z][a-z]+)",
-        text, re.IGNORECASE
-    )
-    if m:
-        return m.group(1).title(), m.group(2).title()
-    m = re.search(r'\b([A-Z][a-z]{1,20})\s+([A-Z][a-z]{1,20})\b', text)
-    if m:
-        return m.group(1), m.group(2)
-    parts = text.strip().split()
-    if len(parts) >= 2:
-        return parts[0].title(), parts[1].title()
-    return None, None
-
-
-def extract_dob_from_text(text: str):
-    m = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{4})\b', text)
-    if m:
-        return m.group(1).replace("/", "-")
-    return None
-
-
-def extract_phone_from_text(text: str):
-    cleaned = re.sub(r'[\s\-\(\)\.]', '', text)
-    m = re.search(r'(\+?[\d]{10,13})', cleaned)
-    if m:
-        return m.group(1)
-    return None
-
-
-def get_collected_details(messages: list, user_email: str) -> dict:
-    recent  = messages[-20:]
-    details = {"email": user_email or ""}
-
-    for i in range(len(recent) - 1):
-        current  = recent[i]
-        next_msg = recent[i + 1]
-        if current.get("role") != "assistant" or next_msg.get("role") != "user":
-            continue
-
-        bot_text  = current.get("content", "").lower()
-        user_text = next_msg.get("content", "")
-
-        if ("full name" in bot_text or "name on your id" in bot_text or "first and last" in bot_text):
-            fn, ln = extract_name_from_text(user_text)
-            if fn and ln:
-                details["firstName"] = fn
-                details["lastName"]  = ln
-
-        elif "date of birth" in bot_text or "dd-mm-yyyy" in bot_text:
-            dob = extract_dob_from_text(user_text)
-            if dob:
-                details["dob"] = dob
-
-        elif "phone" in bot_text and ("reach you" in bot_text or "number" in bot_text):
-            phone = extract_phone_from_text(user_text)
-            if phone:
-                details["phone"] = phone
-
-    return details
-
-
-def get_selected_flight_price(messages: list) -> int:
-    """
-    Extract the price of the flight the user selected from the conversation history.
-    Looks for the last price shown by the bot after a flight selection.
-    """
-    recent   = messages[-20:]
-    bot_msgs = [m.get("content", "") for m in recent if m.get("role") == "assistant"]
-    for msg in reversed(bot_msgs):
-        # Look for ₹ followed by digits (e.g. ₹6,515 or ₹7200)
-        m = re.search(r'₹([\d,]+)', msg)
-        if m:
-            try:
-                return int(m.group(1).replace(",", ""))
-            except:
-                pass
-    return 0
-
 
 def run_workflow(stage: str, user_text: str, messages: list,
                  user_info: dict, is_signed_in: bool) -> dict | None:
-    """
-    Stateless booking workflow derived from conversation history.
-
-    Full flow:
-      FLIGHT_CHOSEN → (login check) → NEED_NAME → NEED_DOB → NEED_PHONE
-      → CONFIRM_DETAILS → CONFIRM_PAYMENT → PROCEED_TO_BOOKING
-    """
     user_email = user_info.get("email", "") if is_signed_in else ""
 
-    # ── FLIGHT_CHOSEN — kick off the collection flow ──────────
+    # FLIGHT_CHOSEN
     if stage == "FLIGHT_CHOSEN":
-      if not is_signed_in:
-        return {
-            "reply": "To book, you'll need to sign in first — it only takes a moment.",
-            "flights": [],
-            "action": "REQUIRE_LOGIN",
-        }
-    # Check if flights were actually shown
-    recent_bot = [m.get("content","") for m in messages[-10:] if m.get("role")=="assistant"]
-    flights_were_shown = any(
-        "₹" in b and ("non-stop" in b.lower() or "stop" in b.lower())
-        for b in recent_bot
-    )
-    if not flights_were_shown:
-        return {
-            "reply": "Sure! First let me find flights for you — which route and date?",
-            "flights": [],
-            "action": None,
-        }
-    return {
-        "reply": "Sure! Let's get you booked. What's the **full name on your ID**? (first and last name)",
-        "flights": [],
-        "action": None,
-    }
-
-    # ── NEED_LOGIN — user came back after login prompt ────────
-    if stage == "NEED_LOGIN":
-        if is_signed_in:
+        if not is_signed_in:
             return {
-                "reply":  "Signed in. What's the **full name on your ID**? (first and last name)",
+                "reply": "To book, you'll need to sign in first — it only takes a moment.",
+                "flights": [],
+                "action": "REQUIRE_LOGIN",
+            }
+        # Check flights were actually shown in chat
+        recent_bot = [m.get("content", "") for m in messages[-15:] if m.get("role") == "assistant"]
+        flights_were_shown = any(
+            "which one works for you" in b.lower() or
+            "strongest pick" in b.lower() or
+            "here's what" in b.lower() or
+            "what's available" in b.lower()
+            for b in recent_bot
+        )
+        if not flights_were_shown:
+            return {
+                "reply": "Sure! First let me find flights — which route and date are you looking at?",
                 "flights": [],
                 "action": None,
             }
         return {
-            "reply":  "Still need to sign in before we can proceed.",
+            "reply": "Sure! Let's get you booked. What's the **full name on your ID**? (first and last name)",
+            "flights": [],
+            "action": None,
+        }
+
+    # NEED_LOGIN
+    if stage == "NEED_LOGIN":
+        if is_signed_in:
+            return {
+                "reply": "Signed in. What's the **full name on your ID**? (first and last name)",
+                "flights": [],
+                "action": None,
+            }
+        return {
+            "reply": "Still need to sign in before we can proceed.",
             "flights": [],
             "action": "REQUIRE_LOGIN",
         }
 
-    # ── NEED_NAME ─────────────────────────────────────────────
+    # NEED_NAME
     if stage == "NEED_NAME":
         fn, ln = extract_name_from_text(user_text)
         if not fn or not ln:
             return {
-                "reply":  "Need both first and last name — try 'Arjun Sharma'.",
+                "reply": "Need both first and last name — try 'Arjun Sharma'.",
                 "flights": [],
                 "action": None,
             }
         return {
-            "reply":  f"Got it, {fn} {ln}. What's your **date of birth**? (DD-MM-YYYY)",
+            "reply": f"Got it, {fn} {ln}. What's your **date of birth**? (DD-MM-YYYY)",
             "flights": [],
             "action": None,
         }
 
-    # ── NEED_DOB ──────────────────────────────────────────────
+    # NEED_DOB
     if stage == "NEED_DOB":
         dob = extract_dob_from_text(user_text)
         if not dob:
             return {
-                "reply":  "Please use DD-MM-YYYY format — for example, 15-08-1995.",
+                "reply": "Please use DD-MM-YYYY format — for example, 15-08-1995.",
                 "flights": [],
                 "action": None,
             }
@@ -458,21 +371,21 @@ def run_workflow(stage: str, user_text: str, messages: list,
         except ValueError:
             return {"reply": "Please use DD-MM-YYYY format — for example, 15-08-1995.", "flights": [], "action": None}
         return {
-            "reply":  "Best **phone number** to reach you?",
+            "reply": "Best **phone number** to reach you?",
             "flights": [],
             "action": None,
         }
 
-    # ── NEED_PHONE ────────────────────────────────────────────
+    # NEED_PHONE
     if stage == "NEED_PHONE":
         phone = extract_phone_from_text(user_text)
         if not phone or len(re.sub(r'\D', '', phone)) < 10:
             return {
-                "reply":  "Need a valid phone number — at least 10 digits.",
+                "reply": "Need a valid phone number — at least 10 digits.",
                 "flights": [],
                 "action": None,
             }
-        details        = get_collected_details(messages, user_email)
+        details = get_collected_details(messages, user_email)
         details["phone"] = phone
 
         fn    = details.get("firstName", "")
@@ -488,14 +401,9 @@ def run_workflow(stage: str, user_text: str, messages: list,
             f"**Email:** {email}\n\n"
             f"Shall I go ahead and lock this in? *(yes / no)*"
         )
-        return {
-            "reply":  summary,
-            "flights": [],
-            "action": None,
-        }
+        return {"reply": summary, "flights": [], "action": None}
 
-    # ── CONFIRM_DETAILS — user approves passenger info ────────
-    # Now show the price and ask for payment confirmation
+    # CONFIRM_DETAILS
     if stage == "CONFIRM_DETAILS":
         yes_words = ["yes", "yep", "yeah", "sure", "ok", "go ahead",
                      "confirm", "proceed", "lock it", "do it", "correct", "looks good"]
@@ -503,7 +411,7 @@ def run_workflow(stage: str, user_text: str, messages: list,
 
         if any(w in user_text.lower() for w in no_words):
             return {
-                "reply":  "No problem — what would you like to change? Name, date of birth, or phone?",
+                "reply": "No problem — what would you like to change? Name, date of birth, or phone?",
                 "flights": [],
                 "action": None,
             }
@@ -512,11 +420,10 @@ def run_workflow(stage: str, user_text: str, messages: list,
             details = get_collected_details(messages, user_email)
             if not details.get("firstName") or not details.get("dob") or not details.get("phone"):
                 return {
-                    "reply":  "Something's missing — let's start again. What's the **full name on your ID**?",
+                    "reply": "Something's missing — let's start again. What's the **full name on your ID**?",
                     "flights": [],
                     "action": None,
                 }
-            # Retrieve the price that was shown for the selected flight
             price = get_selected_flight_price(messages)
             price_display = f"₹{price:,}" if price else "the fare shown"
             return {
@@ -527,16 +434,12 @@ def run_workflow(stage: str, user_text: str, messages: list,
                     f"*(Type **confirm and pay** to proceed, or **cancel** to stop)*"
                 ),
                 "flights": [],
-                "action":  None,
+                "action": None,
             }
 
-        return {
-            "reply":  "Just need a yes or no — shall I lock in those details?",
-            "flights": [],
-            "action": None,
-        }
+        return {"reply": "Just need a yes or no — shall I lock in those details?", "flights": [], "action": None}
 
-    # ── CONFIRM_PAYMENT — user gives final consent to pay ─────
+    # CONFIRM_PAYMENT
     if stage == "CONFIRM_PAYMENT":
         cancel_words = ["cancel", "no", "nope", "stop", "abort", "don't", "back out"]
         pay_words    = [
@@ -546,7 +449,7 @@ def run_workflow(stage: str, user_text: str, messages: list,
 
         if any(w in user_text.lower() for w in cancel_words):
             return {
-                "reply":  "Booking cancelled. No payment has been taken. What else can I help with?",
+                "reply": "Booking cancelled. No payment has been taken. What else can I help with?",
                 "flights": [],
                 "action": None,
             }
@@ -555,7 +458,7 @@ def run_workflow(stage: str, user_text: str, messages: list,
             details = get_collected_details(messages, user_email)
             if not details.get("firstName") or not details.get("dob") or not details.get("phone"):
                 return {
-                    "reply":  "Something's missing — let's restart. What's the **full name on your ID**?",
+                    "reply": "Something's missing — let's restart. What's the **full name on your ID**?",
                     "flights": [],
                     "action": None,
                 }
@@ -566,11 +469,7 @@ def run_workflow(stage: str, user_text: str, messages: list,
                 "passenger": details,
             }
 
-        return {
-            "reply":  "Please type **confirm and pay** to proceed, or **cancel** to stop.",
-            "flights": [],
-            "action": None,
-        }
+        return {"reply": "Please type **confirm and pay** to proceed, or **cancel** to stop.", "flights": [], "action": None}
 
     return None  # fall through to Groq
 
