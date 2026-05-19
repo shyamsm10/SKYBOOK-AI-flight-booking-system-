@@ -179,13 +179,95 @@ _LEAK_PATTERNS = [
     (r'\bget_iata\b',                                    "airport lookup"),
 ]
 _LEAK_RE = [(re.compile(p, re.IGNORECASE), r) for p, r in _LEAK_PATTERNS]
-
 def scrub_output(text: str) -> str:
     for pattern, replacement in _LEAK_RE:
         text = pattern.sub(replacement, text)
     return re.sub(r'  +', ' ', text).strip()
 
 
+# ═══════════════════════════════════════════════════════════════
+# EXTRACT HELPERS
+# ═══════════════════════════════════════════════════════════════
+
+def extract_name_from_text(text: str):
+    m = re.search(
+        r"(?:my name is|i'm|i am|name[:\s]+)\s*([A-Za-z]+)\s+([A-Za-z]+)",
+        text, re.IGNORECASE
+    )
+    if m:
+        return m.group(1).title(), m.group(2).title()
+    m = re.search(r'\b([A-Za-z]{2,20})\s+([A-Za-z]{2,20})\b', text, re.IGNORECASE)
+    if m:
+        return m.group(1).title(), m.group(2).title()
+    parts = text.strip().split()
+    if len(parts) >= 2:
+        return parts[0].title(), parts[1].title()
+    return None, None
+
+
+def extract_dob_from_text(text: str):
+    m = re.search(r'\b(\d{1,2}[-/]\d{1,2}[-/]\d{4})\b', text)
+    if m:
+        return m.group(1).replace("/", "-")
+    return None
+
+
+def extract_phone_from_text(text: str):
+    cleaned = re.sub(r'[\s\-\(\)\.]', '', text)
+    m = re.search(r'(\+?[\d]{10,13})', cleaned)
+    if m:
+        return m.group(1)
+    return None
+
+
+def get_collected_details(messages: list, user_email: str) -> dict:
+    recent  = messages[-20:]
+    details = {"email": user_email or ""}
+
+    for i in range(len(recent) - 1):
+        current  = recent[i]
+        next_msg = recent[i + 1]
+        if current.get("role") != "assistant" or next_msg.get("role") != "user":
+            continue
+
+        bot_text  = current.get("content", "").lower()
+        user_text = next_msg.get("content", "")
+
+        if ("full name" in bot_text or "name on your id" in bot_text or "first and last" in bot_text):
+            fn, ln = extract_name_from_text(user_text)
+            if fn and ln:
+                details["firstName"] = fn
+                details["lastName"]  = ln
+
+        elif "date of birth" in bot_text or "dd-mm-yyyy" in bot_text:
+            dob = extract_dob_from_text(user_text)
+            if dob:
+                details["dob"] = dob
+
+        elif "phone" in bot_text and ("reach you" in bot_text or "number" in bot_text):
+            phone = extract_phone_from_text(user_text)
+            if phone:
+                details["phone"] = phone
+
+    return details
+
+
+def get_selected_flight_price(messages: list) -> int:
+    recent   = messages[-20:]
+    bot_msgs = [m.get("content", "") for m in recent if m.get("role") == "assistant"]
+    for msg in reversed(bot_msgs):
+        m = re.search(r'₹([\d,]+)', msg)
+        if m:
+            try:
+                return int(m.group(1).replace(",", ""))
+            except:
+                pass
+    return 0
+
+
+# ═══════════════════════════════════════════════════════════════
+# WORKFLOW STATE MACHINE
+# ═══════════════════════════════════════════════════════════════
 # ═══════════════════════════════════════════════════════════════
 # WORKFLOW STATE MACHINE
 # ═══════════════════════════════════════════════════════════════
