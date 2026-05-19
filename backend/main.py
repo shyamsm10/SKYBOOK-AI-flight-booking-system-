@@ -253,12 +253,19 @@ def detect_stage(messages: list, is_signed_in: bool) -> str:
             return "IDLE"
         return "NEED_NAME"
 
-    # NEED_LOGIN — bot told user to sign in
+   # AFTER (fixed)
     if "sign in" in last_bot and ("book" in last_bot or "moment" in last_bot):
-         if is_signed_in:
-             return "FLIGHT_CHOSEN"
-         return "NEED_LOGIN"
-
+        if is_signed_in:
+        # User is now signed in — skip past the login prompt
+        # and check if they were mid-booking
+           user_wants_to_book = any(w in last_user for w in [
+            "book", "yes", "confirm", "go ahead", "take it", "proceed",
+            "yep", "yeah", "sure", "ok", "airways", "airlines",
+        ])
+           if user_wants_to_book:
+            return "FLIGHT_CHOSEN"
+        return "IDLE"
+    return "NEED_LOGIN"
     # FLIGHT_CHOSEN — flights shown and user now wants to book
     flights_shown = any(
         "what's available" in b.lower() or
